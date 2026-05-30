@@ -108,6 +108,7 @@ header {
 }
 .config-bar input::placeholder { color: var(--text-3); }
 .config-bar input:focus { border-color: var(--amber); color: var(--text-1); }
+.config-bar input[readonly] { cursor: default; color: var(--text-3); border-color: transparent; background: transparent; }
 
 .config-bar button {
   padding: 0.38rem 0.75rem;

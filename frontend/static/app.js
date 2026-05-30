@@ -63,6 +63,8 @@ function connectWS() {
     wsRetryDelay = 2000;
     $('conn-status').textContent = 'Conectado';
     $('conn-status').className = 'badge connected';
+    $('ip-input').readOnly = true;
+    $('btn-connect').style.display = 'none';
     $('main').classList.remove('hidden');
     loadEqList();
   };
