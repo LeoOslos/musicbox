@@ -3,15 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WiiM Dashboard</title>
+  <title>WiiM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <img id="bg-art" class="bg-art" src="" alt="">
   <div class="container">
+
     <header>
-      <h1>WiiM Dashboard</h1>
+      <div class="brand">
+        <span class="brand-dot"></span>WiiM
+      </div>
       <div class="config-bar">
-        <input id="ip-input" type="text" placeholder="IP del WiiM (ej: 192.168.1.50)">
+        <input id="ip-input" type="text" placeholder="192.168.1.x">
         <button id="btn-connect">Conectar</button>
         <span id="conn-status" class="badge disconnected">Desconectado</span>
       </div>
@@ -23,35 +30,43 @@
       <section class="card now-playing">
         <img id="artwork" src="" alt="" class="artwork hidden">
         <div class="track-info">
-          <div id="track-title" class="track-title">—</div>
-          <div id="track-artist" class="track-artist">—</div>
-          <div id="track-album" class="track-album"></div>
+          <div class="track-meta">
+            <div id="track-title" class="track-title">—</div>
+            <div id="track-artist" class="track-artist">—</div>
+            <div id="track-album" class="track-album"></div>
+          </div>
           <div class="progress-wrap">
-            <div class="progress-bar">
+            <div class="progress-bar" id="progress-bar-click">
               <div id="progress-fill" class="progress-fill" style="width:0%"></div>
             </div>
             <div class="progress-times">
               <span id="pos-label">0:00</span>
+              <span id="play-status">—</span>
               <span id="dur-label">0:00</span>
             </div>
           </div>
         </div>
-        <div id="play-status" class="play-status">—</div>
       </section>
 
-      <!-- Playback controls -->
+      <!-- Controls -->
       <section class="card controls">
-        <button id="btn-prev" title="Anterior">&#9664;&#9664;</button>
-        <button id="btn-toggle" title="Play/Pause" class="btn-primary">&#9654;</button>
-        <button id="btn-next" title="Siguiente">&#9654;&#9654;</button>
-        <button id="btn-stop" title="Stop">&#9632;</button>
+        <button id="btn-prev"   class="ctrl-sm"  title="Anterior">&#9664;&#9664;</button>
+        <button id="btn-stop"   class="ctrl-sm"  title="Stop">&#9632;</button>
+        <button id="btn-toggle" class="ctrl-play" title="Play/Pause">&#9654;</button>
+        <button id="btn-next"   class="ctrl-sm"  title="Siguiente">&#9654;&#9654;</button>
       </section>
 
       <!-- Volume -->
       <section class="card volume-section">
-        <label>Volumen</label>
+        <span class="section-label">Volumen</span>
         <div class="vol-row">
-          <button id="btn-mute" title="Mute">&#128263;</button>
+          <button id="btn-mute" class="mute-btn" title="Mute">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            </svg>
+          </button>
           <input id="vol-slider" type="range" min="0" max="100" value="50">
           <span id="vol-label">50</span>
         </div>
@@ -59,7 +74,7 @@
 
       <!-- Source -->
       <section class="card source-section">
-        <label>Fuente</label>
+        <span class="section-label">Fuente</span>
         <div class="source-grid">
           <button class="source-btn" data-source="wifi">Wi-Fi</button>
           <button class="source-btn" data-source="bluetooth">Bluetooth</button>
@@ -71,16 +86,16 @@
 
       <!-- EQ -->
       <section class="card eq-section">
-        <label>Ecualizador</label>
+        <span class="section-label">Ecualizador</span>
         <div class="eq-row">
-          <select id="eq-select"><option value="">Cargando...</option></select>
-          <button id="btn-eq-apply">Aplicar</button>
+          <select id="eq-select"><option value="">Cargando…</option></select>
+          <button id="btn-eq-apply" class="btn-amber-outline">Aplicar</button>
         </div>
       </section>
 
       <!-- Device info -->
       <section class="card device-info">
-        <label>Dispositivo</label>
+        <span class="section-label">Dispositivo</span>
         <div id="device-details" class="device-details">—</div>
       </section>
 

@@ -42,7 +42,6 @@ $('btn-connect').addEventListener('click', async () => {
     connectWS();
     return;
   }
-  // Try inventory discovery
   try {
     const disc = await fetch('/api/discover').then(r => r.json());
     if (disc.ip) {
@@ -90,9 +89,11 @@ function connectWS() {
 let lastArtworkKey = null;
 
 function updateUI(s) {
-  // Status badge
+  // Status pill with animated dot
   const statusMap = { play: 'Reproduciendo', pause: 'Pausado', stop: 'Detenido', load: 'Cargando' };
-  $('play-status').textContent = statusMap[s.play_state] ?? s.play_state ?? '—';
+  const statusEl = $('play-status');
+  statusEl.textContent = statusMap[s.play_state] ?? s.play_state ?? '—';
+  statusEl.classList.toggle('is-playing', s.is_playing === true);
 
   // Track
   $('track-title').textContent  = s.title  || '—';
@@ -103,11 +104,17 @@ function updateUI(s) {
   const artKey = `${s.title}|${s.artist}`;
   if (artKey !== lastArtworkKey) {
     lastArtworkKey = artKey;
+    const bgArt = $('bg-art');
     if (s.has_artwork) {
-      $('artwork').src = `/api/artwork?t=${Date.now()}`;
+      const url = `/api/artwork?t=${Date.now()}`;
+      $('artwork').src = url;
       $('artwork').classList.remove('hidden');
+      bgArt.classList.remove('visible');
+      bgArt.src = url;
+      bgArt.onload = () => bgArt.classList.add('visible');
     } else {
       $('artwork').classList.add('hidden');
+      $('bg-art').classList.remove('visible');
     }
   }
 
@@ -120,21 +127,30 @@ function updateUI(s) {
 
   // Volume (only update slider if user isn't dragging)
   if (s.volume !== null && s.volume !== undefined && !isDragging) {
-    $('vol-slider').value  = s.volume;
+    $('vol-slider').value      = s.volume;
     $('vol-label').textContent = s.volume;
   }
 
   // Mute
-  $('btn-mute').textContent = s.muted ? '🔇' : '🔊';
+  const muteBtn = $('btn-mute');
+  muteBtn.classList.toggle('muted', s.muted === true);
+  muteBtn.title = s.muted ? 'Desmutear' : 'Mutear';
 
   // Source buttons
   const srcId = s.source ?? '';
   document.querySelectorAll('.source-btn').forEach(b => {
-    // pywiim canonical ids use underscores; buttons use hyphens
     b.classList.toggle('active', b.dataset.source.replace('-', '_') === srcId || b.dataset.source === srcId);
   });
 
-  // Device info
+  // EQ current preset selection
+  if (s.eq_preset) {
+    const sel = $('eq-select');
+    for (const opt of sel.options) {
+      if (opt.value === s.eq_preset) { sel.value = s.eq_preset; break; }
+    }
+  }
+
+  // Device info — 2-column grid
   const fields = [
     ['Nombre',   s.name],
     ['Modelo',   s.model],
@@ -143,7 +159,11 @@ function updateUI(s) {
   ];
   $('device-details').innerHTML = fields
     .filter(([, v]) => v)
-    .map(([k, v]) => `<span class="key">${k}</span><span>${v}</span>`)
+    .map(([k, v]) => `
+      <div class="device-field">
+        <span class="device-field-label">${k}</span>
+        <span class="device-field-value">${v}</span>
+      </div>`)
     .join('');
 }
 
@@ -182,7 +202,7 @@ function restartProgressTimer(s) {
 
 // --- Progress bar seek on click ---
 
-$('progress-fill').parentElement.addEventListener('click', async e => {
+$('progress-bar-click').addEventListener('click', async e => {
   if (!localDur) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const ratio = (e.clientX - rect.left) / rect.width;
@@ -232,7 +252,12 @@ async function loadEqList() {
     const presets = await r.json();
     const sel = $('eq-select');
     sel.innerHTML = '';
+    // "Off" as first option
+    const offOpt = document.createElement('option');
+    offOpt.value = 'off'; offOpt.textContent = 'Off';
+    sel.appendChild(offOpt);
     (Array.isArray(presets) ? presets : []).forEach(p => {
+      if (p.toLowerCase() === 'off') return; // skip if device already returns "Off"
       const opt = document.createElement('option');
       opt.value = p; opt.textContent = p;
       if (p === state.eq_preset) opt.selected = true;
