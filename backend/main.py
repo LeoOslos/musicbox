@@ -138,6 +138,29 @@ async def set_eq_preset(preset: str):
     else:
         await _player().set_eq_preset(preset)
 
+@app.get("/api/eq/bands")
+async def get_eq_bands():
+    data = await _player().get_eq()
+    bands_raw = data.get("EQBand", [])
+    if isinstance(bands_raw, list) and bands_raw:
+        sorted_bands = sorted(bands_raw, key=lambda b: b.get("index", 0))
+        values = [max(0, min(99, int(b.get("value", 50)))) for b in sorted_bands]
+    else:
+        values = [50] * 10
+    while len(values) < 10:
+        values.append(50)
+    return {"bands": values[:10], "enabled": str(data.get("EQStat", "")).lower() == "on"}
+
+@app.post("/api/eq/bands")
+async def set_eq_bands(body: dict):
+    bands = body.get("bands", [])
+    if len(bands) != 10:
+        raise HTTPException(status_code=400, detail="Need exactly 10 band values")
+    values = [max(0, min(99, int(v))) for v in bands]
+    await _player().set_eq_enabled(True)
+    await _player().set_eq_custom(values)
+    return {"ok": True}
+
 
 # --- Artwork ---
 

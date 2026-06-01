@@ -67,6 +67,7 @@ function connectWS() {
     $('btn-connect').style.display = 'none';
     $('main').classList.remove('hidden');
     loadEqList();
+    loadEqBands();
   };
 
   ws.onmessage = e => {
@@ -246,7 +247,7 @@ document.querySelectorAll('.source-btn').forEach(btn => {
   btn.addEventListener('click', () => post(`/api/source/${btn.dataset.source}`));
 });
 
-// --- EQ ---
+// --- EQ Presets ---
 
 async function loadEqList() {
   try {
@@ -254,12 +255,11 @@ async function loadEqList() {
     const presets = await r.json();
     const sel = $('eq-select');
     sel.innerHTML = '';
-    // "Off" as first option
     const offOpt = document.createElement('option');
     offOpt.value = 'off'; offOpt.textContent = 'Off';
     sel.appendChild(offOpt);
     (Array.isArray(presets) ? presets : []).forEach(p => {
-      if (p.toLowerCase() === 'off') return; // skip if device already returns "Off"
+      if (p.toLowerCase() === 'off') return;
       const opt = document.createElement('option');
       opt.value = p; opt.textContent = p;
       if (p === state.eq_preset) opt.selected = true;
@@ -270,7 +270,86 @@ async function loadEqList() {
   }
 }
 
-$('btn-eq-apply').addEventListener('click', () => {
+$('btn-eq-apply').addEventListener('click', async () => {
   const preset = $('eq-select').value;
-  if (preset) post(`/api/eq/preset/${encodeURIComponent(preset)}`);
+  if (preset) {
+    await post(`/api/eq/preset/${encodeURIComponent(preset)}`);
+    // Reload band values after preset change (device updates them)
+    setTimeout(loadEqBands, 400);
+  }
 });
+
+// --- EQ Bands ---
+
+const EQ_FREQS = ['31', '63', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'];
+let eqBands = [50, 50, 50, 50, 50, 50, 50, 50, 50, 50];
+let eqDebounce = null;
+let eqDragging = false;
+
+function buildEqBands() {
+  const container = $('eq-bands');
+  container.innerHTML = '';
+  EQ_FREQS.forEach((freq, i) => {
+    const col = document.createElement('div');
+    col.className = 'eq-band';
+    col.innerHTML = `
+      <span class="eq-val" id="eq-val-${i}">0</span>
+      <div class="eq-band-wrap">
+        <input type="range" class="eq-slider" id="eq-slider-${i}"
+               min="0" max="99" value="50" data-idx="${i}">
+      </div>
+      <span class="eq-freq">${freq}</span>
+    `;
+    container.appendChild(col);
+  });
+
+  document.querySelectorAll('.eq-slider').forEach(slider => {
+    const idx = parseInt(slider.dataset.idx);
+    slider.addEventListener('mousedown',  () => { eqDragging = true; });
+    slider.addEventListener('touchstart', () => { eqDragging = true; }, { passive: true });
+    slider.addEventListener('mouseup',    () => { eqDragging = false; sendEqBands(); });
+    slider.addEventListener('touchend',   () => { eqDragging = false; sendEqBands(); });
+    slider.addEventListener('input', e => {
+      eqBands[idx] = parseInt(e.target.value);
+      updateEqVal(idx, eqBands[idx]);
+    });
+  });
+}
+
+function updateEqVal(idx, v) {
+  const el = $(`eq-val-${idx}`);
+  if (!el) return;
+  const offset = v - 50;
+  el.textContent = offset > 0 ? `+${offset}` : `${offset}`;
+  el.className = 'eq-val' + (offset > 0 ? ' pos' : offset < 0 ? ' neg' : '');
+}
+
+function setEqSliders(bands) {
+  eqBands = [...bands];
+  bands.forEach((v, i) => {
+    const slider = $(`eq-slider-${i}`);
+    if (slider) slider.value = v;
+    updateEqVal(i, v);
+  });
+}
+
+async function loadEqBands() {
+  try {
+    const r = await fetch('/api/eq/bands');
+    const data = await r.json();
+    setEqSliders(data.bands);
+  } catch {}
+}
+
+function sendEqBands() {
+  clearTimeout(eqDebounce);
+  eqDebounce = setTimeout(() => postJSON('/api/eq/bands', { bands: eqBands }), 150);
+}
+
+$('btn-eq-flat').addEventListener('click', async () => {
+  setEqSliders([50, 50, 50, 50, 50, 50, 50, 50, 50, 50]);
+  await postJSON('/api/eq/bands', { bands: eqBands });
+});
+
+// Build sliders on page load (before WS connects)
+buildEqBands();

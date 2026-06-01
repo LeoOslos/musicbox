@@ -437,6 +437,102 @@ input[type="range"]::-moz-range-thumb {
   background: rgba(186, 117, 23, 0.12);
 }
 
+.btn-ghost {
+  padding: 0.38rem 0.75rem;
+  background: transparent;
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-3);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.btn-ghost:hover {
+  border-color: var(--text-3);
+  color: var(--text-2);
+}
+
+/* ─── EQ Bands ───────────────────────────────────────── */
+.eq-bands {
+  display: flex;
+  gap: 2px;
+  padding-top: 1.1rem;
+  overflow-x: auto;
+}
+
+.eq-band {
+  flex: 1;
+  min-width: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.eq-band-wrap {
+  height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eq-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  appearance: none;
+  -webkit-appearance: slider-vertical;
+  width: 14px !important;
+  height: 80px !important;
+  flex: none !important;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--amber);
+  padding: 0;
+}
+
+.eq-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--amber);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.eq-slider::-webkit-slider-thumb:hover { background: var(--amber-light); }
+
+.eq-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--amber);
+  border: none;
+  cursor: pointer;
+}
+
+.eq-freq {
+  font-size: 9px;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.eq-val {
+  font-size: 10px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  min-width: 24px;
+  text-align: center;
+  line-height: 1;
+}
+.eq-val.pos { color: var(--amber-light); }
+.eq-val.neg { color: var(--text-2); }
+
 /* ─── Device Info ────────────────────────────────────── */
 .device-info { display: flex; flex-direction: column; }
 
