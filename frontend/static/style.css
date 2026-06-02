@@ -457,41 +457,43 @@ input[type="range"]::-moz-range-thumb {
 /* ─── EQ Bands ───────────────────────────────────────── */
 .eq-bands {
   display: flex;
-  gap: 2px;
+  gap: 4px;
   padding-top: 1.1rem;
-  overflow-x: auto;
 }
 
 .eq-band {
   flex: 1;
-  min-width: 26px;
+  min-width: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .eq-band-wrap {
+  position: relative;
   height: 88px;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .eq-slider {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  appearance: none;
-  -webkit-appearance: slider-vertical;
-  width: 14px !important;
-  height: 80px !important;
+  position: absolute;
+  transform: rotate(-90deg);
+  transform-origin: center center;
+  width: 80px !important;
+  height: 14px !important;
   flex: none !important;
+  appearance: none;
+  -webkit-appearance: none;
   background: var(--border);
-  border-radius: 2px;
+  border-radius: 7px;
   outline: none;
   cursor: pointer;
-  accent-color: var(--amber);
   padding: 0;
+  margin: 0;
 }
 
 .eq-slider::-webkit-slider-thumb {
