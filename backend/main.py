@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cdrom
+from . import cdrom, discs
 from .inventory import discover_wiim_ip
 from .wiim_player import WiimManager
 from .ws_manager import WSManager
@@ -217,6 +217,8 @@ _toc_cache: list[dict] = []
 _cd_current: int | None = None  # track being played from the disc, for prev/next
 _cd_disc = 0                    # bumped on every disc swap, tells the UI to reload
 _cd_autoplay_until: float | None = None  # deadline for starting a freshly loaded disc
+_disc_info: dict | None = None           # album and track names for the disc in the tray
+_disc_looked_up = False                  # the online lookup is tried once per disc
 
 # Port the WiiM must reach us on — the dashboard's own port (see ecosystem.config.js)
 HTTP_PORT = int(os.environ.get("PORT", "8080"))
@@ -251,6 +253,33 @@ async def _toc(refresh: bool = False) -> list[dict]:
     return _toc_cache
 
 
+async def _identify() -> dict | None:
+    """Album and track names for the disc in the tray, if we can name it.
+
+    Tried once per disc: a remembered choice wins, then the exact lookup. The
+    fuzzy candidates are never applied on their own — see discs.lookup_candidates.
+    """
+    global _disc_info, _disc_looked_up
+    if _disc_info is not None:
+        return _disc_info
+    tracks = await _toc()
+    if not tracks:
+        return None
+    _disc_info = discs.saved(discs.disc_id(tracks))
+    if _disc_info is None and not _disc_looked_up:
+        _disc_looked_up = True
+        _disc_info = await discs.lookup_exact(discs.disc_id(tracks), len(tracks))
+        if _disc_info:
+            discs.remember(discs.disc_id(tracks), _disc_info)
+            _LOGGER.info("disc identified as %s", _disc_info.get("album"))
+    return _disc_info
+
+
+def _named(tracks: list[dict], info: dict | None) -> list[dict]:
+    titles = (info or {}).get("tracks") or {}
+    return [t | {"title": titles.get(str(t["number"]))} for t in tracks]
+
+
 def _track(tracks: list[dict], number: int) -> dict:
     for t in tracks:
         if t["number"] == number:
@@ -270,11 +299,15 @@ async def cd_status():
         return {"status": "no_disc", "tracks": 0, "current": None, "disc": _cd_disc}
     # 'unknown' (drive busy or asleep): keep whatever we already know
     tracks = _toc_cache if state == "unknown" else await _toc()
+    info = await _identify() if tracks else None
     return {
         "status": "audio" if tracks else "data",
         "tracks": len(tracks),
         "current": _cd_current,
         "disc": _cd_disc,
+        "album": (info or {}).get("album"),
+        "artist": (info or {}).get("artist"),
+        "identified": bool(info),
     }
 
 
@@ -285,7 +318,32 @@ async def cd_tracks(refresh: bool = False):
     tracks = await _toc(refresh)
     if not tracks:
         raise HTTPException(status_code=404, detail="Disc has no audio tracks")
-    return tracks
+    return _named(tracks, await _identify())
+
+
+@app.get("/api/cd/candidates")
+async def cd_candidates():
+    """Albums whose shape matches this disc, for the user to choose between."""
+    tracks = await _toc()
+    if not tracks:
+        raise HTTPException(status_code=404, detail="No audio CD in the drive")
+    return await discs.lookup_candidates(tracks)
+
+
+@app.post("/api/cd/identify/{release_id}")
+async def cd_identify(release_id: str):
+    """Pin this disc to a chosen album, and remember it for next time."""
+    global _disc_info
+    tracks = await _toc()
+    if not tracks:
+        raise HTTPException(status_code=404, detail="No audio CD in the drive")
+    entry = await discs.lookup_release(release_id, len(tracks))
+    if not entry or not entry.get("tracks"):
+        raise HTTPException(status_code=404, detail="No track list for that album")
+    discs.remember(discs.disc_id(tracks), entry)
+    _disc_info = entry
+    _broadcast()
+    return entry
 
 
 @app.get("/api/cd/track/{number}.wav")
@@ -424,7 +482,7 @@ async def _cd_watcher() -> None:
     what tells the two apart. A pause in the last CD_END_SLACK seconds of a
     track will advance; that is the accepted cost of the ambiguity.
     """
-    global _cd_current, _cd_disc, _cd_autoplay_until
+    global _cd_current, _cd_disc, _cd_autoplay_until, _disc_info, _disc_looked_up
     # The kernel always reports "media changed" on the first read, so consume it
     # here: on startup that is not a disc someone just put in, and acting on it
     # would start playing music every time the service restarts.
@@ -438,6 +496,8 @@ async def _cd_watcher() -> None:
                 await _stop_for_disc_release("disc pulled")
                 await cdrom.stop_reading()
                 _toc_cache.clear()
+                _disc_info = None
+                _disc_looked_up = False
                 _cd_current = None
                 _cd_disc += 1
                 _cd_autoplay_until = time.monotonic() + CD_AUTOPLAY_WINDOW
