@@ -297,8 +297,15 @@ async def _lookup_online(tracks: list[dict]) -> None:
 
 
 def _named(tracks: list[dict], info: dict | None) -> list[dict]:
+    """Track titles: what the user typed wins over whatever the databases say.
+
+    GnuDB in particular hands back titles that were already broken when they
+    were stored, so a hand correction has to outrank any later lookup.
+    """
     titles = (info or {}).get("tracks") or {}
-    return [t | {"title": titles.get(str(t["number"]))} for t in tracks]
+    mine = discs.edits(discs.disc_id(tracks)) if tracks else {}
+    return [t | {"title": mine.get(str(t["number"])) or titles.get(str(t["number"])),
+                 "edited": str(t["number"]) in mine} for t in tracks]
 
 
 def _track(tracks: list[dict], number: int) -> dict:
@@ -368,6 +375,18 @@ async def cd_search(q: str):
         raise HTTPException(status_code=400, detail="Nothing to search for")
     tracks = await _toc()
     return await discs.search_by_name(q.strip(), len(tracks))
+
+
+@app.post("/api/cd/title/{number}")
+async def cd_set_title(number: int, body: dict):
+    """Correct one track's name by hand. An empty name undoes the correction."""
+    tracks = await _toc()
+    if not tracks:
+        raise HTTPException(status_code=404, detail="No audio CD in the drive")
+    _track(tracks, number)
+    title = discs.set_edit(discs.disc_id(tracks), number, str(body.get("title") or ""))
+    _broadcast()
+    return {"ok": True, "number": number, "title": title}
 
 
 @app.post("/api/cd/forget")

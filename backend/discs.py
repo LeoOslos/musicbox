@@ -30,6 +30,11 @@ PREGAP = 150  # disc offsets are LBA plus the two second lead-in
 
 CACHE_FILE = Path(os.environ.get("CD_NAMES_FILE", Path.home() / "musicbox" / "discs.json"))
 
+# Hand corrections live apart from the looked-up names on purpose: they have to
+# survive picking another edition, and re-identifying a disc must never quietly
+# overwrite something the user typed.
+EDITS_FILE = Path(os.environ.get("CD_EDITS_FILE", CACHE_FILE.parent / "track_edits.json"))
+
 _lock = asyncio.Lock()
 _last_call = 0.0
 
@@ -55,11 +60,24 @@ def toc_param(tracks: list[dict]) -> str:
 
 # --- Local cache ---
 
-def _read_cache() -> dict:
+def _read(path: Path) -> dict:
     try:
-        return json.loads(CACHE_FILE.read_text())
+        return json.loads(path.read_text())
     except (OSError, ValueError):
         return {}
+
+
+def _write(path: Path, data: dict) -> None:
+    """Write through a temporary file: a half-written names file reads as empty
+    and would silently lose every disc ever identified."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    tmp.replace(path)
+
+
+def _read_cache() -> dict:
+    return _read(CACHE_FILE)
 
 
 def saved(discid: str) -> dict | None:
@@ -72,9 +90,7 @@ def forget(discid: str) -> bool:
     if discid not in cache:
         return False
     del cache[discid]
-    tmp = CACHE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cache, ensure_ascii=False, indent=2))
-    tmp.replace(CACHE_FILE)
+    _write(CACHE_FILE, cache)
     _LOGGER.info("forgot the name saved for %s", discid)
     return True
 
@@ -82,11 +98,37 @@ def forget(discid: str) -> bool:
 def remember(discid: str, entry: dict) -> None:
     cache = _read_cache()
     cache[discid] = entry
-    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = CACHE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cache, ensure_ascii=False, indent=2))
-    tmp.replace(CACHE_FILE)
+    _write(CACHE_FILE, cache)
     _LOGGER.info("remembered %s as %s", discid, entry.get("album"))
+
+
+# --- Hand corrections ---
+
+def edits(discid: str) -> dict[str, str]:
+    """Titles the user typed for this disc, keyed by track number."""
+    return _read(EDITS_FILE).get(discid) or {}
+
+
+def set_edit(discid: str, number: int, title: str) -> str | None:
+    """Save one corrected title, or drop the correction when given nothing.
+
+    Clearing is how a correction is undone: the name from the database comes
+    back, and nothing about the identification itself is touched.
+    """
+    store = _read(EDITS_FILE)
+    disc = dict(store.get(discid) or {})
+    title = " ".join(title.split())
+    if title:
+        disc[str(number)] = title
+    else:
+        disc.pop(str(number), None)
+    if disc:
+        store[discid] = disc
+    else:
+        store.pop(discid, None)
+    _write(EDITS_FILE, store)
+    _LOGGER.info("track %s of %s renamed to %r", number, discid, title or None)
+    return title or None
 
 
 # --- MusicBrainz ---

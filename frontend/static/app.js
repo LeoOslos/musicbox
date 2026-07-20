@@ -339,11 +339,35 @@ function renderCdTracks() {
       <span class="cd-track-num">${t.number}</span>
       ${t.title ? `<span class="cd-track-name">${esc(t.title)}</span>` : ''}
       <span class="cd-track-dur">${fmtTime(t.seconds)}</span>
+      ${named ? `<span class="cd-track-edit${t.edited ? ' edited' : ''}" data-edit="${t.number}"
+        role="button" tabindex="0" title="Corregir el nombre">✎</span>` : ''}
     </button>`).join('');
 
   document.querySelectorAll('.cd-track').forEach(btn => {
     btn.addEventListener('click', () => postCd(`/api/cd/play/${btn.dataset.track}`));
   });
+  // Inside the play button, so every path to it has to stop the click from
+  // reaching the tile — otherwise correcting a name also starts the track.
+  document.querySelectorAll('.cd-track-edit').forEach(pen => {
+    pen.addEventListener('click', ev => { ev.stopPropagation(); editTitle(pen.dataset.edit); });
+    pen.addEventListener('keydown', ev => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      editTitle(pen.dataset.edit);
+    });
+  });
+}
+
+// Corrections outrank the databases, so this is also the way out of a title
+// that arrived broken. Emptying the box restores the looked-up name.
+async function editTitle(number) {
+  const track = cdTracks.find(t => t.number === parseInt(number));
+  if (!track) return;
+  const typed = prompt(`Nombre del tema ${number} (vacío = volver al de la base)`, track.title || '');
+  if (typed === null) return;
+  await postJSON(`/api/cd/title/${number}`, { title: typed });
+  await loadCd();
 }
 
 // --- Naming the disc ---

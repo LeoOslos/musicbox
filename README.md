@@ -86,6 +86,7 @@ La IP del WiiM se resuelve automáticamente al iniciar desde `~/iot-mvp/device-b
 | POST | `/api/cd/eject` | Expulsar (para la música antes) |
 | GET | `/api/cd/candidates` | Álbumes que coinciden con el TOC, para elegir a mano |
 | POST | `/api/cd/identify/{release_id}` | Fijar el álbum y recordarlo |
+| POST | `/api/cd/title/{n}` | Corregir a mano el nombre de un tema (vacío = volver al de la base) |
 | POST | `/api/cd/forget` | Deshacer la identificación |
 
 ## Niveles de desarrollo
@@ -120,6 +121,8 @@ Detalles que no son obvios:
   `freedb.org` está muerto desde 2020. Sus datos son de peor calidad: hay entradas con los acentos ya
   rotos **en origen** (llegan como U+FFFD, no es problema de encoding del cliente), así que se limpian
   al entrar.
+- **Los nombres corregidos a mano le ganan a las dos bases** y sobreviven a cambiar de edición: viven
+  aparte, en `~/musicbox/track_edits.json` (el lápiz de cada tema; vaciar el texto vuelve al de la base).
 - **La búsqueda de nombres nunca bloquea la reproducción**: corre en segundo plano y avisa por WebSocket.
 
 ### Requisitos

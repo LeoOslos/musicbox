@@ -596,6 +596,22 @@ input[type="range"]::-moz-range-thumb {
   color: var(--amber-text);
 }
 
+/* Faint until you look for it: correcting a name is rare, playing is not */
+.cd-track-edit {
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 3px;
+  border-radius: 4px;
+  color: var(--text-3);
+  opacity: 0.45;
+  transition: opacity 0.15s, color 0.15s;
+}
+.cd-track:hover .cd-track-edit,
+.cd-track-edit:focus { opacity: 1; color: var(--text-1); outline: none; }
+.cd-track-edit:focus { box-shadow: 0 0 0 1px var(--amber-light); }
+/* A title the user typed is worth telling apart from one out of a database */
+.cd-track-edit.edited { color: var(--amber-text); opacity: 0.9; }
+
 .cd-track-num { font-size: 13px; font-weight: 500; }
 .cd-track-dur { font-size: 10px; color: var(--text-3); }
 .cd-track.active .cd-track-dur { color: var(--amber-text); }
