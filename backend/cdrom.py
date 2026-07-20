@@ -137,27 +137,59 @@ async def stop_reading() -> None:
             proc.kill()
 
 
-async def stream_track(number: int, sectors: int):
+def _span(number: int, start_sector: int) -> str:
+    """cdparanoia span starting mid-track. Frames are sectors: 75 to the second."""
+    if start_sector <= 0:
+        return f"{number}-{number}"
+    minutes, rest = divmod(start_sector, 75 * 60)
+    seconds, frames = divmod(rest, 75)
+    return f"{number}[{minutes}:{seconds:02d}.{frames:02d}]-{number}"
+
+
+async def stream_track(number: int, sectors: int, byte_offset: int = 0, limit: int | None = None):
     """Yield WAV bytes for one track, read from the disc as they are consumed.
+
+    byte_offset lets the player seek: the drive is told to start at the matching
+    sector rather than us reading and discarding the earlier audio. Every byte
+    maps to a fixed place on the disc, so the arithmetic is exact.
 
     -Z disables paranoia's verification passes: it takes the drive from ~1.5x to
     ~4.4x realtime, which is what makes live playback possible on this hardware.
     """
     global _current
+    header = wav_header(sectors)
+    if byte_offset < len(header):
+        pending_header = header[byte_offset:]
+        start_sector, drop = 0, 0
+    else:
+        audio_offset = byte_offset - len(header)
+        pending_header = b""
+        start_sector, drop = divmod(audio_offset, SECTOR_BYTES)
+
     await stop_reading()
     async with _lock:
         proc = subprocess.Popen(
-            ["cdparanoia", "-d", DEVICE, "-Z", "-q", "-r", f"{number}-{number}", "-"],
+            ["cdparanoia", "-d", DEVICE, "-Z", "-q", "-r", _span(number, start_sector), "-"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
         _current = proc
+        sent = 0
         try:
-            yield wav_header(sectors)
-            while True:
+            if pending_header:
+                yield pending_header
+                sent += len(pending_header)
+            while limit is None or sent < limit:
                 chunk = await asyncio.to_thread(proc.stdout.read, SECTOR_BYTES * 16)
                 if not chunk:
                     break
+                if drop:
+                    chunk, drop = chunk[drop:], 0
+                    if not chunk:
+                        continue
+                if limit is not None and sent + len(chunk) > limit:
+                    chunk = chunk[: limit - sent]
                 yield chunk
+                sent += len(chunk)
         finally:
             if proc.poll() is None:
                 proc.terminate()

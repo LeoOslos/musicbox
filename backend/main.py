@@ -5,7 +5,7 @@ import socket
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -109,7 +109,9 @@ async def transport():
         await player.pause()
         return {"action": "pause"}
     if raw in ("pause", "load"):
-        await player.play()
+        # play() re-loads the URL and restarts the track from zero; the
+        # play/pause toggle is what actually un-pauses.
+        await player.media_play_pause()
         return {"action": "resume"}
 
     # Stopped: nothing to resume, so put the disc on if there is one.
@@ -287,12 +289,40 @@ async def cd_tracks(refresh: bool = False):
 
 
 @app.get("/api/cd/track/{number}.wav")
-async def cd_track_audio(number: int):
+async def cd_track_audio(number: int, request: Request):
+    """Serve a track as WAV, honouring Range so the player can seek.
+
+    Without Range the device cannot jump within a track: dragging the progress
+    bar made it re-request the file and playback stalled. Every byte maps to a
+    known sector, so a range turns straight into a drive position.
+    """
     track = _track(await _toc(), number)
+    total = cdrom.wav_size(track["sectors"])
+    start, end = 0, total - 1
+
+    header = request.headers.get("range", "")
+    ranged = header.startswith("bytes=")
+    if ranged:
+        first, _, last = header[len("bytes="):].split(",")[0].strip().partition("-")
+        try:
+            start = int(first) if first else 0
+            if last:
+                end = min(int(last), total - 1)
+        except ValueError:
+            start, end = 0, total - 1
+        if start > end or start >= total:
+            raise HTTPException(status_code=416, detail="Range beyond end of track")
+
+    length = end - start + 1
+    headers = {"Accept-Ranges": "bytes", "Content-Length": str(length)}
+    if ranged:
+        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+
     return StreamingResponse(
-        cdrom.stream_track(number, track["sectors"]),
+        cdrom.stream_track(number, track["sectors"], start, length),
         media_type="audio/wav",
-        headers={"Content-Length": str(cdrom.wav_size(track["sectors"]))},
+        headers=headers,
+        status_code=206 if ranged else 200,
     )
 
 
