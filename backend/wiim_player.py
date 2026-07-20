@@ -107,6 +107,10 @@ class WiimManager:
             "firmware":     p.firmware,
             "ip":           self.ip,
             "play_state":   p.play_state,
+            # Raw device state: pywiim's play_state reports 'pause' for a
+            # stopped device too, and the two need telling apart — stopped has
+            # nothing to resume, paused does.
+            "device_state": p._status_model.play_state if p._status_model else None,
             "is_playing":   p.is_playing,
             "title":        p.media_title,
             "artist":       p.media_artist,
