@@ -102,9 +102,12 @@ function updateUI(s) {
   // Track. For a disc, the device reports our stream URL as the title, which is
   // no use to anyone — name the track instead.
   const onDisc = typeof s.title === 'string' && s.title.includes('/api/cd/track/');
-  $('track-title').textContent  = onDisc ? `Tema ${s.cd_track ?? ''}`.trim() : (s.title || '—');
-  $('track-artist').textContent = onDisc ? 'CD' : (s.artist || '—');
-  $('track-album').textContent  = onDisc ? '' : (s.album || '');
+  const named = onDisc ? cdTracks.find(t => t.number === s.cd_track) : null;
+  $('track-title').textContent  = onDisc
+    ? (named?.title || `Tema ${s.cd_track ?? ''}`.trim())
+    : (s.title || '—');
+  $('track-artist').textContent = onDisc ? (cdAlbumArtist || 'CD') : (s.artist || '—');
+  $('track-album').textContent  = onDisc ? (cdAlbumTitle || '') : (s.album || '');
 
   // Artwork — reload only when track changes
   const artKey = `${s.title}|${s.artist}`;
@@ -267,6 +270,8 @@ document.querySelectorAll('.source-btn').forEach(btn => {
 let cdTracks = [];
 let cdCurrent = null;
 let cdDisc = null;   // disc generation from the server; a change means swapped disc
+let cdAlbumTitle = '';
+let cdAlbumArtist = '';
 
 async function postCd(path) {
   const r = await fetch(path, { method: 'POST' });
@@ -298,12 +303,20 @@ async function loadCd(refresh = false) {
     if (s.status !== 'audio') {
       statusEl.textContent = s.status === 'no_disc' ? 'Sin disco' : 'Disco sin audio';
       $('cd-tracks').innerHTML = '';
+      $('btn-cd-identify').classList.add('hidden');
+      $('cd-candidates').classList.add('hidden');
       cdTracks = [];
       return;
     }
     cdTracks = await fetch(`/api/cd/tracks${refresh ? '?refresh=true' : ''}`).then(r => r.json());
     const total = cdTracks.reduce((a, t) => a + t.seconds, 0);
-    statusEl.textContent = `${cdTracks.length} temas · ${fmtTime(total)}`;
+    const shape = `${cdTracks.length} temas · ${fmtTime(total)}`;
+    statusEl.textContent = s.identified && s.album
+      ? `${s.album}${s.artist ? ' · ' + s.artist : ''} — ${shape}`
+      : shape;
+    $('btn-cd-identify').classList.toggle('hidden', !!s.identified);
+    cdAlbumTitle = s.identified ? (s.album || '') : '';
+    cdAlbumArtist = s.identified ? (s.artist || '') : '';
     renderCdTracks();
     markCdTrack(s.current);
   } catch {
@@ -311,10 +324,16 @@ async function loadCd(refresh = false) {
   }
 }
 
+const esc = s => String(s).replace(/[&<>"]/g, c => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
 function renderCdTracks() {
+  const named = cdTracks.some(t => t.title);
+  $('cd-tracks').classList.toggle('named', named);
   $('cd-tracks').innerHTML = cdTracks.map(t => `
-    <button class="cd-track" data-track="${t.number}" title="Tema ${t.number}">
+    <button class="cd-track" data-track="${t.number}" title="${esc(t.title || 'Tema ' + t.number)}">
       <span class="cd-track-num">${t.number}</span>
+      ${t.title ? `<span class="cd-track-name">${esc(t.title)}</span>` : ''}
       <span class="cd-track-dur">${fmtTime(t.seconds)}</span>
     </button>`).join('');
 
@@ -322,6 +341,42 @@ function renderCdTracks() {
     btn.addEventListener('click', () => postCd(`/api/cd/play/${btn.dataset.track}`));
   });
 }
+
+// --- Naming the disc ---
+
+// Opt-in on purpose: an unidentified disc still plays and is fully controllable,
+// so this never interrupts. Nothing is applied without the user choosing it.
+$('btn-cd-identify').addEventListener('click', async () => {
+  const box = $('cd-candidates');
+  if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  box.innerHTML = '<div class="cd-candidate">Buscando álbumes que coincidan…</div>';
+  try {
+    const list = await fetch('/api/cd/candidates').then(r => r.json());
+    if (!Array.isArray(list) || !list.length) {
+      box.innerHTML = '<div class="cd-candidate">No se encontró ningún álbum parecido</div>';
+      return;
+    }
+    box.innerHTML = list.map(c => `
+      <button class="cd-candidate" data-release="${esc(c.release_id)}">
+        <span class="cd-candidate-album">${esc(c.album || '—')}</span>
+        <span>${esc(c.artist || '')}</span>
+        <span class="cd-candidate-first">${esc(c.tracks['1'] || '')}</span>
+        <span class="cd-candidate-meta">${esc([c.date, c.country].filter(Boolean).join(' · '))}</span>
+      </button>`).join('');
+
+    box.querySelectorAll('.cd-candidate[data-release]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        box.innerHTML = '<div class="cd-candidate">Guardando…</div>';
+        await postCd(`/api/cd/identify/${btn.dataset.release}`);
+        box.classList.add('hidden');
+        loadCd();
+      });
+    });
+  } catch {
+    box.innerHTML = '<div class="cd-candidate">No se pudo consultar la base de datos</div>';
+  }
+});
 
 $('btn-cd-eject').addEventListener('click', async () => {
   await postCd('/api/cd/eject');
