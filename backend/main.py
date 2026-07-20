@@ -449,28 +449,43 @@ async def _cd_watcher() -> None:
         if _cd_current is None or not wiim.player:
             continue
         try:
+            raw = str((await wiim.player.client.get_player_status()).get("play_status", ""))
             await wiim.player.refresh()
             s = wiim.get_state()
             playing_ours = CD_URL_MARK in (s.get("title") or "")
+
             # Something else (Spotify, AirPlay, radio) grabbed the speaker: let
             # go of the disc, or we would shove the next track over their music
             # as soon as one of their tracks ended.
             if s.get("is_playing") and not playing_ours:
                 _LOGGER.info("another source took over, releasing the CD")
+                await cdrom.stop_reading()
                 _cd_current = None
                 _broadcast()
                 continue
+
+            # Only a real 'stop' is interesting. A pause keeps the reader alive
+            # so resuming picks up where it left off. Note the raw status is the
+            # one that separates the two — pywiim calls both of them 'pause'.
+            if raw != "stop":
+                continue
+
             duration = s.get("duration") or 0
             position = s.get("position") or 0
-            if s.get("is_playing") or not playing_ours or duration <= 0:
+            if playing_ours and duration > 0 and position >= duration - CD_END_SLACK:
+                _LOGGER.info("track %s finished (%s/%s), advancing", _cd_current, position, duration)
+                await cd_next()
+                # The device reports the old stopped state for a moment while
+                # the next track loads — not another track ending.
+                await asyncio.sleep(CD_ADVANCE_SETTLE)
                 continue
-            if position < duration - CD_END_SLACK:
-                continue
-            _LOGGER.info("track %s finished (%s/%s), advancing", _cd_current, position, duration)
-            await cd_next()
-            # The device reports the old stopped state for a moment while the
-            # next track loads — don't read that as another track ending.
-            await asyncio.sleep(CD_ADVANCE_SETTLE)
+
+            # Stopped somewhere else (the WiiM app, a remote): drop the disc,
+            # otherwise the drive keeps reading a track nobody is listening to.
+            _LOGGER.info("stopped outside the dashboard, releasing the CD")
+            await cdrom.stop_reading()
+            _cd_current = None
+            _broadcast()
         except Exception as exc:
             _LOGGER.warning("CD watcher error: %s", exc)
 
