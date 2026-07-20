@@ -395,6 +395,66 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 500;
 }
 
+/* ─── CD ─────────────────────────────────────────────── */
+.cd-section { display: flex; flex-direction: column; }
+
+.cd-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0.9rem;
+}
+.cd-head .section-label { margin-bottom: 0; }
+
+.cd-status {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.cd-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 1rem;
+}
+
+.cd-tracks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 6px;
+}
+
+.cd-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0.4rem 0.2rem;
+  border-radius: 8px;
+  background: transparent;
+  border: 0.5px solid var(--border);
+  color: var(--text-2);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.cd-track:hover {
+  background: rgba(250, 238, 218, 0.05);
+  border-color: var(--text-3);
+  color: var(--text-1);
+}
+.cd-track.active {
+  background: var(--amber-soft);
+  border-color: var(--amber-light);
+  color: var(--amber-text);
+}
+
+.cd-track-num { font-size: 13px; font-weight: 500; }
+.cd-track-dur { font-size: 10px; color: var(--text-3); }
+.cd-track.active .cd-track-dur { color: var(--amber-text); }
+
 /* ─── EQ ─────────────────────────────────────────────── */
 .eq-section { display: flex; flex-direction: column; }
 

@@ -169,6 +169,7 @@ async def set_eq_bands(body: dict):
 # --- Audio CD ---
 
 _toc_cache: list[dict] = []
+_cd_current: int | None = None  # track being played from the disc, for prev/next
 
 # Port the WiiM must reach us on — the dashboard's own port (see ecosystem.config.js)
 HTTP_PORT = int(os.environ.get("PORT", "8080"))
@@ -200,11 +201,17 @@ def _track(tracks: list[dict], number: int) -> dict:
 
 @app.get("/api/cd/status")
 async def cd_status():
+    global _cd_current
     if not await asyncio.to_thread(cdrom.disc_present):
         _toc_cache.clear()
-        return {"status": "no_disc", "tracks": 0}
+        _cd_current = None
+        return {"status": "no_disc", "tracks": 0, "current": None}
     tracks = await _toc()
-    return {"status": "audio" if tracks else "data", "tracks": len(tracks)}
+    return {
+        "status": "audio" if tracks else "data",
+        "tracks": len(tracks),
+        "current": _cd_current,
+    }
 
 
 @app.get("/api/cd/tracks")
@@ -227,26 +234,55 @@ async def cd_track_audio(number: int):
     )
 
 
-@app.post("/api/cd/play/{number}")
-async def cd_play(number: int):
+async def _cd_play(number: int) -> dict:
+    global _cd_current
     _track(await _toc(), number)
     url = f"http://{_local_ip()}:{HTTP_PORT}/api/cd/track/{number}.wav"
     await _player().play_url(url)
+    _cd_current = number
     return {"ok": True, "track": number, "url": url}
+
+
+@app.post("/api/cd/play/{number}")
+async def cd_play(number: int):
+    return await _cd_play(number)
+
+
+@app.post("/api/cd/next")
+async def cd_next():
+    tracks = await _toc()
+    numbers = [t["number"] for t in tracks]
+    after = [n for n in numbers if _cd_current is None or n > _cd_current]
+    if not after:
+        return await cd_stop()
+    return await _cd_play(after[0])
+
+
+@app.post("/api/cd/prev")
+async def cd_prev():
+    tracks = await _toc()
+    numbers = [t["number"] for t in tracks]
+    before = [n for n in numbers if _cd_current is not None and n < _cd_current]
+    # No previous track: restart the current one, like a CD player does
+    return await _cd_play(before[-1] if before else (_cd_current or numbers[0]))
 
 
 @app.post("/api/cd/stop")
 async def cd_stop():
+    global _cd_current
     await _player().stop()
     await cdrom.stop_reading()
-    return {"ok": True}
+    _cd_current = None
+    return {"ok": True, "track": None}
 
 
 @app.post("/api/cd/eject")
 async def cd_eject():
+    global _cd_current
     await cdrom.stop_reading()
     await asyncio.to_thread(cdrom.eject)
     _toc_cache.clear()
+    _cd_current = None
     return {"ok": True}
 
 

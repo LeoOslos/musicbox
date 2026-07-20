@@ -68,6 +68,7 @@ function connectWS() {
     $('main').classList.remove('hidden');
     loadEqList();
     loadEqBands();
+    loadCd();
   };
 
   ws.onmessage = e => {
@@ -245,6 +246,82 @@ $('btn-mute').addEventListener('click', () => {
 
 document.querySelectorAll('.source-btn').forEach(btn => {
   btn.addEventListener('click', () => post(`/api/source/${btn.dataset.source}`));
+});
+
+// --- CD ---
+
+let cdTracks = [];
+let cdCurrent = null;
+
+async function postCd(path) {
+  const r = await fetch(path, { method: 'POST' });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ detail: r.statusText }));
+    console.warn('CD error:', err.detail);
+    return null;
+  }
+  const data = await r.json().catch(() => ({}));
+  if ('track' in data) markCdTrack(data.track);
+  return data;
+}
+
+function markCdTrack(number) {
+  cdCurrent = number;
+  document.querySelectorAll('.cd-track').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.track) === number);
+  });
+}
+
+// The drive takes a moment to spin up, so status is loaded once and cached
+// server-side; "Releer" forces a re-read after swapping discs.
+async function loadCd(refresh = false) {
+  const statusEl = $('cd-status');
+  statusEl.textContent = 'Leyendo…';
+  try {
+    const s = await fetch('/api/cd/status').then(r => r.json());
+    if (s.status !== 'audio') {
+      statusEl.textContent = s.status === 'no_disc' ? 'Sin disco' : 'Disco sin audio';
+      $('cd-tracks').innerHTML = '';
+      cdTracks = [];
+      return;
+    }
+    cdTracks = await fetch(`/api/cd/tracks${refresh ? '?refresh=true' : ''}`).then(r => r.json());
+    const total = cdTracks.reduce((a, t) => a + t.seconds, 0);
+    statusEl.textContent = `${cdTracks.length} temas · ${fmtTime(total)}`;
+    renderCdTracks();
+    markCdTrack(s.current);
+  } catch {
+    statusEl.textContent = 'Error al leer';
+  }
+}
+
+function renderCdTracks() {
+  $('cd-tracks').innerHTML = cdTracks.map(t => `
+    <button class="cd-track" data-track="${t.number}" title="Tema ${t.number}">
+      <span class="cd-track-num">${t.number}</span>
+      <span class="cd-track-dur">${fmtTime(t.seconds)}</span>
+    </button>`).join('');
+
+  document.querySelectorAll('.cd-track').forEach(btn => {
+    btn.addEventListener('click', () => postCd(`/api/cd/play/${btn.dataset.track}`));
+  });
+}
+
+$('btn-cd-play').addEventListener('click', () => {
+  // Already streaming from the disc: this is a pause/resume of the WiiM.
+  // Otherwise start the disc from the selected track (or the first one).
+  if (cdCurrent !== null) return post('/api/toggle');
+  if (cdTracks.length) postCd(`/api/cd/play/${cdTracks[0].number}`);
+});
+
+$('btn-cd-prev').addEventListener('click', () => postCd('/api/cd/prev'));
+$('btn-cd-next').addEventListener('click', () => postCd('/api/cd/next'));
+$('btn-cd-stop').addEventListener('click', () => postCd('/api/cd/stop'));
+$('btn-cd-refresh').addEventListener('click', () => loadCd(true));
+
+$('btn-cd-eject').addEventListener('click', async () => {
+  await postCd('/api/cd/eject');
+  loadCd();
 });
 
 // --- EQ Presets ---
