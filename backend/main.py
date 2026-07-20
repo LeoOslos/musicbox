@@ -100,7 +100,7 @@ async def transport():
     """
     player = _player()
     try:
-        raw = str((await player.client.get_player_status()).get("status", ""))
+        raw = str((await player.client.get_player_status()).get("play_status", ""))
     except Exception as exc:
         _LOGGER.warning("could not read raw device status: %s", exc)
         raw = ""
