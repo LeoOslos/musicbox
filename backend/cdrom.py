@@ -125,16 +125,28 @@ def wav_size(sectors: int) -> int:
     return 44 + sectors * SECTOR_BYTES
 
 
+def _reap(proc: subprocess.Popen) -> None:
+    """Stop the reader and collect it.
+
+    Terminating without wait()ing leaves a zombie for every track played: the
+    child is dead but stays in the process table until someone reads its exit
+    status. Cheap to do right, invisible until you go looking.
+    """
+    if proc.poll() is None:
+        proc.terminate()
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=2)
+
+
 async def stop_reading() -> None:
     """Terminate any in-flight read so the drive is free for the next request."""
     global _current
     proc, _current = _current, None
-    if proc and proc.poll() is None:
-        proc.terminate()
-        try:
-            await asyncio.to_thread(proc.wait, 5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+    if proc:
+        await asyncio.to_thread(_reap, proc)
 
 
 def _span(number: int, start_sector: int) -> str:
@@ -191,8 +203,9 @@ async def stream_track(number: int, sectors: int, byte_offset: int = 0, limit: i
                 yield chunk
                 sent += len(chunk)
         finally:
-            if proc.poll() is None:
-                proc.terminate()
+            # Runs on every close, including the device hanging up mid-track,
+            # which is the common case and the one that was leaking zombies.
+            _reap(proc)
             proc.stdout.close()
             if _current is proc:
                 _current = None
