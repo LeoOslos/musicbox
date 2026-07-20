@@ -88,6 +88,40 @@ def _player():
 async def toggle():
     await _player().media_play_pause()
 
+
+@app.post("/api/transport")
+async def transport():
+    """Play/pause that still does something from a standing stop.
+
+    Both pywiim and the UPnP events call a stopped device 'pause', but the two
+    are not the same: a pause has a stream to resume and a stop does not, so
+    play/pause on a stopped device did nothing at all. The device's own HTTP
+    status is the one place they can be told apart, so ask it directly.
+    """
+    player = _player()
+    try:
+        raw = str((await player.client.get_player_status()).get("status", ""))
+    except Exception as exc:
+        _LOGGER.warning("could not read raw device status: %s", exc)
+        raw = ""
+
+    if raw == "play":
+        await player.pause()
+        return {"action": "pause"}
+    if raw in ("pause", "load"):
+        await player.play()
+        return {"action": "resume"}
+
+    # Stopped: nothing to resume, so put the disc on if there is one.
+    present = await asyncio.to_thread(cdrom.disc_state) == "present"
+    tracks = await _toc() if present else []
+    if tracks:
+        started = _cd_current or tracks[0]["number"]
+        await _cd_play(started)
+        return {"action": "cd_start", "track": started}
+    await player.play()
+    return {"action": "play"}
+
 @app.post("/api/play")
 async def play():
     await _player().play()

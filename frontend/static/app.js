@@ -230,7 +230,7 @@ $('progress-bar-click').addEventListener('click', async e => {
 // step through, each track is a separate stream we push at it.
 const onCd = () => cdCurrent !== null;
 
-$('btn-toggle').addEventListener('click', () => post('/api/toggle'));
+$('btn-toggle').addEventListener('click', () => postCd('/api/transport'));
 $('btn-prev').addEventListener('click',   () => onCd() ? postCd('/api/cd/prev') : post('/api/prev'));
 $('btn-next').addEventListener('click',   () => onCd() ? postCd('/api/cd/next') : post('/api/next'));
 $('btn-stop').addEventListener('click',   () => onCd() ? postCd('/api/cd/stop') : post('/api/stop'));
