@@ -66,6 +66,19 @@ def saved(discid: str) -> dict | None:
     return _read_cache().get(discid)
 
 
+def forget(discid: str) -> bool:
+    """Drop a saved identification. Any choice has to be undoable."""
+    cache = _read_cache()
+    if discid not in cache:
+        return False
+    del cache[discid]
+    tmp = CACHE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(cache, ensure_ascii=False, indent=2))
+    tmp.replace(CACHE_FILE)
+    _LOGGER.info("forgot the name saved for %s", discid)
+    return True
+
+
 def remember(discid: str, entry: dict) -> None:
     cache = _read_cache()
     cache[discid] = entry

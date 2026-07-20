@@ -343,6 +343,21 @@ async def cd_candidates():
     return await discs.lookup_candidates(tracks)
 
 
+@app.post("/api/cd/forget")
+async def cd_forget():
+    """Undo an identification, back to plain track numbers."""
+    global _disc_info, _disc_looked_up
+    tracks = await _toc()
+    if not tracks:
+        raise HTTPException(status_code=404, detail="No audio CD in the drive")
+    discs.forget(discs.disc_id(tracks))
+    _disc_info = None
+    # Don't look it up again for this disc: it was just rejected by hand.
+    _disc_looked_up = True
+    _broadcast()
+    return {"ok": True, "identified": False}
+
+
 @app.post("/api/cd/identify/{release_id}")
 async def cd_identify(release_id: str):
     """Pin this disc to a chosen album, and remember it for next time."""

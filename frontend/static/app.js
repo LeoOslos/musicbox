@@ -270,6 +270,7 @@ document.querySelectorAll('.source-btn').forEach(btn => {
 let cdTracks = [];
 let cdCurrent = null;
 let cdDisc = null;   // disc generation from the server; a change means swapped disc
+let cdIdentified = false;
 let cdAlbumTitle = '';
 let cdAlbumArtist = '';
 
@@ -314,7 +315,10 @@ async function loadCd(refresh = false) {
     statusEl.textContent = s.identified && s.album
       ? `${s.album}${s.artist ? ' · ' + s.artist : ''} — ${shape}`
       : shape;
-    $('btn-cd-identify').classList.toggle('hidden', !!s.identified);
+    // Always offered, never forced: an identification can also be corrected
+    $('btn-cd-identify').classList.remove('hidden');
+    $('btn-cd-identify').textContent = s.identified ? 'Cambiar nombres' : 'Identificar disco';
+    cdIdentified = !!s.identified;
     cdAlbumTitle = s.identified ? (s.album || '') : '';
     cdAlbumArtist = s.identified ? (s.artist || '') : '';
     renderCdTracks();
@@ -357,13 +361,24 @@ $('btn-cd-identify').addEventListener('click', async () => {
       box.innerHTML = '<div class="cd-candidate">No se encontró ningún álbum parecido</div>';
       return;
     }
-    box.innerHTML = list.map(c => `
+    const escape = `
+      <button class="cd-candidate cd-candidate-none" data-none="1">
+        <span class="cd-candidate-album">No estoy seguro</span>
+        <span>${cdIdentified ? 'quitar los nombres guardados' : 'dejarlo sin nombres por ahora'}</span>
+      </button>`;
+    box.innerHTML = escape + list.map(c => `
       <button class="cd-candidate" data-release="${esc(c.release_id)}">
         <span class="cd-candidate-album">${esc(c.album || '—')}</span>
         <span>${esc(c.artist || '')}</span>
         <span class="cd-candidate-first">${esc(c.tracks['1'] || '')}</span>
         <span class="cd-candidate-meta">${esc([c.date, c.country].filter(Boolean).join(' · '))}</span>
       </button>`).join('');
+
+    box.querySelector('.cd-candidate[data-none]').addEventListener('click', async () => {
+      if (cdIdentified) await postCd('/api/cd/forget');
+      box.classList.add('hidden');
+      loadCd();
+    });
 
     box.querySelectorAll('.cd-candidate[data-release]').forEach(btn => {
       btn.addEventListener('click', async () => {
