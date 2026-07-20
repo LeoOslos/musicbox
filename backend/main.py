@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import socket
 from contextlib import asynccontextmanager
@@ -12,12 +13,15 @@ from .inventory import discover_wiim_ip
 from .wiim_player import WiimManager
 from .ws_manager import WSManager
 
+_LOGGER = logging.getLogger(__name__)
+
 wiim = WiimManager()
 ws_mgr = WSManager()
 
 
 def _broadcast() -> None:
-    ws_mgr.broadcast(wiim.get_state())
+    # cd_track rides along so the UI follows automatic track changes
+    ws_mgr.broadcast(wiim.get_state() | {"cd_track": _cd_current})
 
 
 @asynccontextmanager
@@ -27,7 +31,10 @@ async def lifespan(app: FastAPI):
     ip = discover_wiim_ip()
     if ip:
         await wiim.setup(ip)
+    cd_task = asyncio.create_task(_cd_watcher(), name="cd-watcher")
     yield
+    cd_task.cancel()
+    await cdrom.stop_reading()
     await wiim.teardown()
 
 
@@ -174,6 +181,10 @@ _cd_current: int | None = None  # track being played from the disc, for prev/nex
 # Port the WiiM must reach us on — the dashboard's own port (see ecosystem.config.js)
 HTTP_PORT = int(os.environ.get("PORT", "8080"))
 
+CD_WATCH_INTERVAL = 2    # seconds between end-of-track checks while a CD plays
+CD_END_SLACK = 3         # seconds from the end that still count as "finished"
+CD_ADVANCE_SETTLE = 8    # seconds to ignore state while the next track loads
+
 
 def _local_ip() -> str:
     """Our address on the interface that reaches the WiiM — the URL it must fetch."""
@@ -274,6 +285,36 @@ async def cd_stop():
     await cdrom.stop_reading()
     _cd_current = None
     return {"ok": True, "track": None}
+
+
+async def _cd_watcher() -> None:
+    """Advance to the next track when the current one runs out.
+
+    A finished stream shows up as play_state 'stop' with position at duration
+    (measured: 58/58 on a 58s track). A stop from the dashboard clears
+    _cd_current, and a stop from elsewhere mid-track lands far from the end,
+    so neither is mistaken for a track ending.
+    """
+    while True:
+        await asyncio.sleep(CD_WATCH_INTERVAL)
+        if _cd_current is None or not wiim.player:
+            continue
+        try:
+            await wiim.player.refresh()
+            s = wiim.get_state()
+            duration = s.get("duration") or 0
+            position = s.get("position") or 0
+            if s.get("play_state") != "stop" or duration <= 0:
+                continue
+            if position < duration - CD_END_SLACK:
+                continue
+            _LOGGER.info("CD track %s finished, advancing", _cd_current)
+            await cd_next()
+            # The device reports the old stopped state for a moment while the
+            # next track loads — don't read that as another track ending.
+            await asyncio.sleep(CD_ADVANCE_SETTLE)
+        except Exception as exc:
+            _LOGGER.warning("CD watcher error: %s", exc)
 
 
 @app.post("/api/cd/eject")

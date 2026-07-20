@@ -154,6 +154,9 @@ function updateUI(s) {
     }
   }
 
+  // CD track highlight — follows automatic advance, not just clicks
+  if (s.cd_track !== undefined && s.cd_track !== cdCurrent) markCdTrack(s.cd_track);
+
   // Device info — 2-column grid
   const fields = [
     ['Nombre',   s.name],
