@@ -21,8 +21,8 @@ ws_mgr = WSManager()
 
 
 def _broadcast() -> None:
-    # cd_track rides along so the UI follows automatic track changes
-    ws_mgr.broadcast(wiim.get_state() | {"cd_track": _cd_current})
+    # cd_* ride along so the UI follows track changes and disc swaps on its own
+    ws_mgr.broadcast(wiim.get_state() | {"cd_track": _cd_current, "cd_disc": _cd_disc})
 
 
 @asynccontextmanager
@@ -178,6 +178,7 @@ async def set_eq_bands(body: dict):
 
 _toc_cache: list[dict] = []
 _cd_current: int | None = None  # track being played from the disc, for prev/next
+_cd_disc = 0                    # bumped on every disc swap, tells the UI to reload
 
 # Port the WiiM must reach us on — the dashboard's own port (see ecosystem.config.js)
 HTTP_PORT = int(os.environ.get("PORT", "8080"))
@@ -220,13 +221,14 @@ async def cd_status():
             _LOGGER.info("disc gone, clearing CD state (was track %s)", _cd_current)
         _toc_cache.clear()
         _cd_current = None
-        return {"status": "no_disc", "tracks": 0, "current": None}
+        return {"status": "no_disc", "tracks": 0, "current": None, "disc": _cd_disc}
     # 'unknown' (drive busy or asleep): keep whatever we already know
     tracks = _toc_cache if state == "unknown" else await _toc()
     return {
         "status": "audio" if tracks else "data",
         "tracks": len(tracks),
         "current": _cd_current,
+        "disc": _cd_disc,
     }
 
 
@@ -303,8 +305,18 @@ async def _cd_watcher() -> None:
     what tells the two apart. A pause in the last CD_END_SLACK seconds of a
     track will advance; that is the accepted cost of the ambiguity.
     """
+    global _cd_current, _cd_disc
     while True:
         await asyncio.sleep(CD_WATCH_INTERVAL)
+        try:
+            if await asyncio.to_thread(cdrom.media_changed):
+                _LOGGER.info("disc swapped, dropping cached TOC")
+                _toc_cache.clear()
+                _cd_current = None
+                _cd_disc += 1
+                _broadcast()
+        except Exception as exc:
+            _LOGGER.warning("media change check failed: %s", exc)
         if _cd_current is None or not wiim.player:
             continue
         try:

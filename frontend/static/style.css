@@ -420,6 +420,20 @@ input[type="range"]::-moz-range-thumb {
   margin-bottom: 1rem;
 }
 
+/* Set apart from the transport buttons: it acts on the disc, not the music */
+.cd-eject {
+  margin-left: 26px;
+  font-size: 15px;
+}
+
+.cd-hint {
+  margin-top: 0.9rem;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.cd-hint strong { color: var(--text-2); font-weight: 500; }
+
 .cd-tracks {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));

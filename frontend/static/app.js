@@ -157,6 +157,10 @@ function updateUI(s) {
   // CD track highlight — follows automatic advance, not just clicks
   if (s.cd_track !== undefined && s.cd_track !== cdCurrent) markCdTrack(s.cd_track);
 
+  // Disc swapped in the drive: reload the track list by itself
+  if (s.cd_disc !== undefined && cdDisc !== null && s.cd_disc !== cdDisc) loadCd(true);
+  if (s.cd_disc !== undefined) cdDisc = s.cd_disc;
+
   // Device info — 2-column grid
   const fields = [
     ['Nombre',   s.name],
@@ -255,6 +259,7 @@ document.querySelectorAll('.source-btn').forEach(btn => {
 
 let cdTracks = [];
 let cdCurrent = null;
+let cdDisc = null;   // disc generation from the server; a change means swapped disc
 
 async function postCd(path) {
   const r = await fetch(path, { method: 'POST' });
@@ -275,13 +280,14 @@ function markCdTrack(number) {
   });
 }
 
-// The drive takes a moment to spin up, so status is loaded once and cached
-// server-side; "Releer" forces a re-read after swapping discs.
+// The TOC is cached server-side because reading it spins up the drive; the
+// backend watches for disc swaps and tells us to reload through cd_disc.
 async function loadCd(refresh = false) {
   const statusEl = $('cd-status');
   statusEl.textContent = 'Leyendo…';
   try {
     const s = await fetch('/api/cd/status').then(r => r.json());
+    if (s.disc !== undefined) cdDisc = s.disc;
     if (s.status !== 'audio') {
       statusEl.textContent = s.status === 'no_disc' ? 'Sin disco' : 'Disco sin audio';
       $('cd-tracks').innerHTML = '';
@@ -320,7 +326,6 @@ $('btn-cd-play').addEventListener('click', () => {
 $('btn-cd-prev').addEventListener('click', () => postCd('/api/cd/prev'));
 $('btn-cd-next').addEventListener('click', () => postCd('/api/cd/next'));
 $('btn-cd-stop').addEventListener('click', () => postCd('/api/cd/stop'));
-$('btn-cd-refresh').addEventListener('click', () => loadCd(true));
 
 $('btn-cd-eject').addEventListener('click', async () => {
   await postCd('/api/cd/eject');

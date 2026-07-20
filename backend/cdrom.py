@@ -24,6 +24,7 @@ CHANNELS = 2
 BITS = 16
 
 CDROM_DISC_STATUS = 0x5326
+CDROM_MEDIA_CHANGED = 0x5325
 _DISC_STATUS = {
     0: "no_info", 1: "no_disc", 2: "tray_open", 3: "drive_not_ready", 4: "disc_ok",
     100: "audio", 101: "data", 102: "data", 103: "data", 104: "data", 105: "mixed",
@@ -54,6 +55,23 @@ def disc_status() -> str:
         return _DISC_STATUS.get(fcntl.ioctl(fd, CDROM_DISC_STATUS), "unknown")
     except OSError:
         return "no_disc"
+    finally:
+        os.close(fd)
+
+
+def media_changed() -> bool:
+    """True once after the disc is swapped — the kernel clears the flag on read.
+
+    Only one caller may poll this or they steal each other's notification.
+    """
+    try:
+        fd = os.open(DEVICE, os.O_RDONLY | os.O_NONBLOCK)
+    except OSError:
+        return False
+    try:
+        return bool(fcntl.ioctl(fd, CDROM_MEDIA_CHANGED, 0))
+    except OSError:
+        return False
     finally:
         os.close(fd)
 
