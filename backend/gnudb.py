@@ -67,14 +67,23 @@ def _query_string(tracks: list[dict]) -> str:
     return "+".join(parts)
 
 
-def clean(text: str) -> str:
-    """Drop the replacement characters GnuDB entries are peppered with.
+# What a lost character looks like in these entries: U+FFFD itself, and the
+# far more common 'ï¿½', which is U+FFFD's own UTF-8 bytes read back as latin-1
+# and stored that way. Verified byte by byte against the server (c3af c2bf c2bd),
+# and proto=5 returns the same, so the damage is in the database, not in transit.
+_BROKEN = ("�", "ï¿½", "â€™")
 
-    'Riprendo mai più' is stored as 'Reprendo mai piï¿½' — the mojibake is in the
-    database, so there is nothing to decode back. Removing U+FFFD at least keeps
-    the rest of the title readable instead of showing black diamonds.
+
+def clean(text: str) -> str:
+    """Drop the mangled characters GnuDB entries are peppered with.
+
+    'Riprendo mai più' is stored as 'Reprendo mai piï¿½' — misspelled *and*
+    corrupted at the source, so there is nothing to decode back. Dropping the
+    debris keeps the rest of the title readable instead of showing diamonds.
     """
-    return text.replace("�", "").replace("  ", " ").strip()
+    for bad in _BROKEN:
+        text = text.replace(bad, "")
+    return " ".join(text.split())
 
 
 async def _call(command: str) -> str | None:
