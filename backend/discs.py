@@ -157,6 +157,7 @@ def _as_entry(release: dict, count: int) -> dict:
         # Names for a pressing with a different track count will not line up
         "exact": len(titles) == count,
         "tracks": {str(n): t for n, t in titles.items()},
+        "source": "musicbrainz",
     }
 
 
@@ -204,6 +205,7 @@ async def search_by_name(query: str, count: int, limit: int = 12) -> list[dict]:
             "track_count": tracks,
             "exact": tracks == count,
             "tracks": {},
+            "source": "musicbrainz",
         })
     # Same track count first: those are the ones whose names will line up
     results.sort(key=lambda r: (not r["exact"], r.get("date") or ""))

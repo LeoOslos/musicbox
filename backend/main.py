@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cdrom, discs
+from . import cdrom, discs, gnudb
 from .inventory import discover_wiim_ip
 from .wiim_player import WiimManager
 from .ws_manager import WSManager
@@ -271,20 +271,28 @@ def _identify(tracks: list[dict]) -> dict | None:
 
 
 async def _lookup_online(tracks: list[dict]) -> None:
-    """Background half of _identify: ask MusicBrainz, tell the UI if it lands."""
+    """Background half of _identify: ask the databases, tell the UI if it lands.
+
+    MusicBrainz first — its data is cleaner — and GnuDB second, which is where
+    the local pressings actually are. Neither is allowed to guess: each only
+    answers here when it has a single unambiguous match.
+    """
     global _disc_info
     try:
         discid = discs.disc_id(tracks)
         entry = await discs.lookup_exact(discid, len(tracks))
+        if not entry:
+            _LOGGER.info("disc not in MusicBrainz — asking GnuDB")
+            entry = await gnudb.lookup_exact(tracks)
     except Exception as exc:
         _LOGGER.warning("disc lookup failed: %s", exc)
         return
     if not entry:
-        _LOGGER.info("disc not in MusicBrainz — needs picking by hand")
+        _LOGGER.info("disc not identified automatically — needs picking by hand")
         return
     discs.remember(discid, entry)
     _disc_info = entry
-    _LOGGER.info("disc identified as %s", entry.get("album"))
+    _LOGGER.info("disc identified as %s (%s)", entry.get("album"), entry.get("source"))
     _broadcast()
 
 
@@ -336,11 +344,21 @@ async def cd_tracks(refresh: bool = False):
 
 @app.get("/api/cd/candidates")
 async def cd_candidates():
-    """Albums whose shape matches this disc, for the user to choose between."""
+    """Albums whose shape matches this disc, for the user to choose between.
+
+    Both databases are asked: MusicBrainz matches on its own disc ID, GnuDB on
+    the raw offsets, and they miss different discs. GnuDB goes second because
+    its data is dirtier, not because it matches worse.
+    """
     tracks = await _toc()
     if not tracks:
         raise HTTPException(status_code=404, detail="No audio CD in the drive")
-    return await discs.lookup_candidates(tracks)
+    found = await discs.lookup_candidates(tracks)
+    try:
+        found += await gnudb.candidates(tracks)
+    except Exception as exc:
+        _LOGGER.warning("GnuDB candidates failed: %s", exc)
+    return found
 
 
 @app.get("/api/cd/search")
@@ -374,7 +392,11 @@ async def cd_identify(release_id: str):
     tracks = await _toc()
     if not tracks:
         raise HTTPException(status_code=404, detail="No audio CD in the drive")
-    entry = await discs.lookup_release(release_id, len(tracks))
+    gnu = gnudb.parse_release_id(release_id)
+    if gnu:
+        entry = await gnudb.read_entry(gnu[0], gnu[1], len(tracks))
+    else:
+        entry = await discs.lookup_release(release_id, len(tracks))
     if not entry or not entry.get("tracks"):
         raise HTTPException(status_code=404, detail="No track list for that album")
     discs.remember(discs.disc_id(tracks), entry)

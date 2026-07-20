@@ -112,6 +112,14 @@ Detalles que no son obvios:
   eventos UPnP informan `pause` para ambos.
 - **El disc id de MusicBrainz identifica una edición, no un álbum.** Los prensados locales suelen no
   estar cargados; para esos hay elección manual, guardada en `~/musicbox/discs.json`.
+- **Los nombres se buscan en dos bases**: MusicBrainz primero (datos más limpios) y **GnuDB** después,
+  que es donde sí están las ediciones locales. Ninguna adivina: se aplica sola únicamente si devuelve
+  **una** coincidencia. Si hay varias — Romanza da dos, la castellana y la italiana, con títulos
+  distintos — van a la lista de candidatos para elegir a mano.
+- **GnuDB es CDDB por HTTP, no HTTPS** (por HTTPS da 404), en `gnudb.gnudb.org/~cddb/cddb.cgi`;
+  `freedb.org` está muerto desde 2020. Sus datos son de peor calidad: hay entradas con los acentos ya
+  rotos **en origen** (llegan como U+FFFD, no es problema de encoding del cliente), así que se limpian
+  al entrar.
 - **La búsqueda de nombres nunca bloquea la reproducción**: corre en segundo plano y avisa por WebSocket.
 
 ### Requisitos

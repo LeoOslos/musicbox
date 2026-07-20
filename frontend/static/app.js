@@ -362,7 +362,7 @@ function renderCandidates(list, box) {
       <span>${esc(c.artist || '')}</span>
       <span class="cd-candidate-first">${esc(c.tracks['1'] || '')}</span>
       ${c.exact === false ? `<span class="cd-candidate-warn">${c.track_count} temas, tu disco tiene ${cdTracks.length}</span>` : ''}
-      <span class="cd-candidate-meta">${esc([c.date, c.country].filter(Boolean).join(' · '))}</span>
+      <span class="cd-candidate-meta">${esc([c.date, c.country, c.source === 'gnudb' ? 'GnuDB' : ''].filter(Boolean).join(' · '))}</span>
     </button>`).join('');
   wireCandidates(box);
 }
