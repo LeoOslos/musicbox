@@ -77,6 +77,16 @@ La IP del WiiM se resuelve automáticamente al iniciar desde `~/iot-mvp/device-b
 | POST | `/api/eq/preset/{name}` | Aplicar preset EQ |
 | GET | `/api/artwork` | Carátula actual (imagen) |
 | WS | `/ws` | Stream de estado en tiempo real |
+| GET | `/api/cd/status` | Disco presente, cantidad de temas, álbum, tema en curso |
+| GET | `/api/cd/tracks` | Lista de temas con duración y título (si el disco está identificado) |
+| GET | `/api/cd/track/{n}.wav` | Audio del tema, leído en vivo del disco. Acepta `Range` |
+| POST | `/api/cd/play/{n}` | Reproducir un tema |
+| POST | `/api/cd/next` / `prev` / `stop` | Transporte del disco |
+| POST | `/api/transport` | Play/pausa que además arranca el disco si el equipo está detenido |
+| POST | `/api/cd/eject` | Expulsar (para la música antes) |
+| GET | `/api/cd/candidates` | Álbumes que coinciden con el TOC, para elegir a mano |
+| POST | `/api/cd/identify/{release_id}` | Fijar el álbum y recordarlo |
+| POST | `/api/cd/forget` | Deshacer la identificación |
 
 ## Niveles de desarrollo
 
@@ -84,3 +94,27 @@ La IP del WiiM se resuelve automáticamente al iniciar desde `~/iot-mvp/device-b
 - [x] **Nivel 2** — WebSocket push, UPnP events, carátula, barra de progreso
 - [x] **Nivel 3 (parcial)** — Auto-discovery desde inventario IoT local
 - [ ] Nivel 3 (pendiente) — Alarmas, Squeezelite/LMS
+
+
+## CD de audio
+
+La lectora de Mint (`/dev/sr0`) se reproduce en el WiiM **sin copiar nada al disco**: `cdparanoia` lee
+el tema y el propio dashboard lo sirve como WAV en el puerto 8080, que es la URL que el WiiM busca.
+
+Detalles que no son obvios:
+
+- **Nada se escribe a disco.** La lectora entrega a ~4,4x la velocidad de reproducción (medido, con
+  `-Z`), suficiente para escuchar en vivo. Importa porque Mint tiene el swap sobre un HDD 5400rpm.
+- **El WiiM buferea minutos por delante**, así que al sacar el disco hay que **mandar parar el equipo**
+  explícitamente o sigue sonando. Las dos vías de expulsión (botón y bandeja física) pasan por
+  `_stop_for_disc_release`.
+- **`play_status` crudo del equipo** es lo único que distingue *pausado* de *detenido*: pywiim y los
+  eventos UPnP informan `pause` para ambos.
+- **El disc id de MusicBrainz identifica una edición, no un álbum.** Los prensados locales suelen no
+  estar cargados; para esos hay elección manual, guardada en `~/musicbox/discs.json`.
+- **La búsqueda de nombres nunca bloquea la reproducción**: corre en segundo plano y avisa por WebSocket.
+
+### Requisitos
+
+`cdparanoia` y `eject` (paquetes del sistema). El puerto 8080 debe estar habilitado en ufw — es la
+razón por la que el audio se sirve desde el dashboard y no desde un servidor aparte.
