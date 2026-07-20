@@ -253,26 +253,39 @@ async def _toc(refresh: bool = False) -> list[dict]:
     return _toc_cache
 
 
-async def _identify() -> dict | None:
-    """Album and track names for the disc in the tray, if we can name it.
+def _identify(tracks: list[dict]) -> dict | None:
+    """Names we already have. Never waits on the network.
 
-    Tried once per disc: a remembered choice wins, then the exact lookup. The
-    fuzzy candidates are never applied on their own — see discs.lookup_candidates.
+    Naming is decoration; playing the disc is the job. The online lookup runs as
+    a background task and the names appear when they appear — a slow or
+    unreachable MusicBrainz must not hold up the track list or the controls.
     """
     global _disc_info, _disc_looked_up
-    if _disc_info is not None:
+    if _disc_info is not None or not tracks:
         return _disc_info
-    tracks = await _toc()
-    if not tracks:
-        return None
     _disc_info = discs.saved(discs.disc_id(tracks))
     if _disc_info is None and not _disc_looked_up:
         _disc_looked_up = True
-        _disc_info = await discs.lookup_exact(discs.disc_id(tracks), len(tracks))
-        if _disc_info:
-            discs.remember(discs.disc_id(tracks), _disc_info)
-            _LOGGER.info("disc identified as %s", _disc_info.get("album"))
+        asyncio.create_task(_lookup_online(list(tracks)), name="disc-lookup")
     return _disc_info
+
+
+async def _lookup_online(tracks: list[dict]) -> None:
+    """Background half of _identify: ask MusicBrainz, tell the UI if it lands."""
+    global _disc_info
+    try:
+        discid = discs.disc_id(tracks)
+        entry = await discs.lookup_exact(discid, len(tracks))
+    except Exception as exc:
+        _LOGGER.warning("disc lookup failed: %s", exc)
+        return
+    if not entry:
+        _LOGGER.info("disc not in MusicBrainz — needs picking by hand")
+        return
+    discs.remember(discid, entry)
+    _disc_info = entry
+    _LOGGER.info("disc identified as %s", entry.get("album"))
+    _broadcast()
 
 
 def _named(tracks: list[dict], info: dict | None) -> list[dict]:
@@ -299,7 +312,7 @@ async def cd_status():
         return {"status": "no_disc", "tracks": 0, "current": None, "disc": _cd_disc}
     # 'unknown' (drive busy or asleep): keep whatever we already know
     tracks = _toc_cache if state == "unknown" else await _toc()
-    info = await _identify() if tracks else None
+    info = _identify(tracks)
     return {
         "status": "audio" if tracks else "data",
         "tracks": len(tracks),
@@ -318,7 +331,7 @@ async def cd_tracks(refresh: bool = False):
     tracks = await _toc(refresh)
     if not tracks:
         raise HTTPException(status_code=404, detail="Disc has no audio tracks")
-    return _named(tracks, await _identify())
+    return _named(tracks, _identify(tracks))
 
 
 @app.get("/api/cd/candidates")
