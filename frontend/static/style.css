@@ -396,7 +396,32 @@ input[type="range"]::-moz-range-thumb {
 }
 
 /* ─── CD ─────────────────────────────────────────────── */
-.cd-section { display: flex; flex-direction: column; }
+
+/* Transport and disc are one device, so they share one card, split by a rule */
+.cd-section {
+  display: flex;
+  flex-direction: column;
+  margin-top: 1.4rem;
+  padding-top: 1.4rem;
+  border-top: 0.5px solid var(--border);
+}
+
+.cd-start {
+  padding: 0.34rem 0.8rem;
+  background: var(--amber-soft);
+  border: 1px solid var(--amber-light);
+  border-radius: 8px;
+  color: var(--amber-text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.cd-start:hover { filter: brightness(1.25); }
+.cd-start:disabled { opacity: 0.35; cursor: default; filter: none; }
 
 .cd-head {
   display: flex;

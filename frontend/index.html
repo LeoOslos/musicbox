@@ -48,26 +48,30 @@
         </div>
       </section>
 
-      <!-- Controls -->
-      <section class="card controls">
-        <button id="btn-prev"   class="ctrl-sm"  title="Anterior">&#9664;&#9664;</button>
-        <button id="btn-stop"   class="ctrl-sm"  title="Stop">&#9632;</button>
-        <button id="btn-toggle" class="ctrl-play" title="Play/Pause">&#9654;</button>
-        <button id="btn-next"   class="ctrl-sm"  title="Siguiente">&#9654;&#9654;</button>
-      </section>
-
-      <!-- CD -->
-      <section class="card cd-section">
-        <div class="cd-head">
-          <span class="section-label">CD</span>
-          <span id="cd-status" class="cd-status">—</span>
-          <button id="btn-cd-eject" class="cd-eject" title="Expulsar el disco">
-            <span class="eject-icon">&#9167;</span>Expulsar
-          </button>
+      <!-- Controls + CD: one player, one panel -->
+      <section class="card player">
+        <div class="controls">
+          <button id="btn-prev"   class="ctrl-sm"  title="Anterior">&#9664;&#9664;</button>
+          <button id="btn-stop"   class="ctrl-sm"  title="Stop">&#9632;</button>
+          <button id="btn-toggle" class="ctrl-play" title="Play/Pause">&#9654;</button>
+          <button id="btn-next"   class="ctrl-sm"  title="Siguiente">&#9654;&#9654;</button>
         </div>
-        <div class="cd-tracks" id="cd-tracks"></div>
-        <p class="cd-hint">Tocá un tema para empezar; los botones de arriba manejan el disco.
-          Llega por la red, así que el WiiM queda en <strong>Wi-Fi</strong> solo.</p>
+
+        <div class="cd-section">
+          <div class="cd-head">
+            <span class="section-label">CD</span>
+            <span id="cd-status" class="cd-status">—</span>
+            <button id="btn-cd-start" class="cd-start" title="Reproducir el disco desde el principio">
+              &#9654; Reproducir disco
+            </button>
+            <button id="btn-cd-eject" class="cd-eject" title="Expulsar el disco">
+              <span class="eject-icon">&#9167;</span>Expulsar
+            </button>
+          </div>
+          <div class="cd-tracks" id="cd-tracks"></div>
+          <p class="cd-hint">Reproducí el disco entero o tocá un tema suelto. Llega por la red,
+            así que el WiiM queda en <strong>Wi-Fi</strong> solo.</p>
+        </div>
       </section>
 
       <!-- Volume -->

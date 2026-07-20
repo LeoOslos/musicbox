@@ -298,9 +298,11 @@ async function loadCd(refresh = false) {
     if (s.status !== 'audio') {
       statusEl.textContent = s.status === 'no_disc' ? 'Sin disco' : 'Disco sin audio';
       $('cd-tracks').innerHTML = '';
+      $('btn-cd-start').disabled = true;
       cdTracks = [];
       return;
     }
+    $('btn-cd-start').disabled = false;
     cdTracks = await fetch(`/api/cd/tracks${refresh ? '?refresh=true' : ''}`).then(r => r.json());
     const total = cdTracks.reduce((a, t) => a + t.seconds, 0);
     statusEl.textContent = `${cdTracks.length} temas · ${fmtTime(total)}`;
@@ -322,6 +324,12 @@ function renderCdTracks() {
     btn.addEventListener('click', () => postCd(`/api/cd/play/${btn.dataset.track}`));
   });
 }
+
+// The disc needs a start of its own: the transport above plays whatever the
+// speaker is already on, which may well be Spotify.
+$('btn-cd-start').addEventListener('click', () => {
+  if (cdTracks.length) postCd(`/api/cd/play/${cdTracks[0].number}`);
+});
 
 $('btn-cd-eject').addEventListener('click', async () => {
   await postCd('/api/cd/eject');
