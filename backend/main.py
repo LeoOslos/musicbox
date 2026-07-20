@@ -370,6 +370,23 @@ async def cd_stop():
     return {"ok": True, "track": None}
 
 
+async def _stop_for_disc_release(reason: str) -> None:
+    """Stop playback whenever the disc goes away, by button or by hand.
+
+    The device buffers minutes ahead of what the drive has read, so without
+    this it happily keeps playing a disc that is already out of the tray.
+    Both eject paths go through here: when they each did their own thing, the
+    dashboard button silently skipped the stop.
+    """
+    if _cd_current is None or not wiim.player:
+        return
+    _LOGGER.info("%s while playing track %s, stopping", reason, _cd_current)
+    try:
+        await wiim.player.stop()
+    except Exception as exc:
+        _LOGGER.warning("could not stop playback on disc release: %s", exc)
+
+
 async def _try_autoplay() -> None:
     """Start a disc that was just loaded, but only into a silent speaker.
 
@@ -418,15 +435,7 @@ async def _cd_watcher() -> None:
         try:
             if await asyncio.to_thread(cdrom.media_changed):
                 _LOGGER.info("disc swapped, dropping cached TOC")
-                if _cd_current is not None and wiim.player:
-                    # The device buffers far ahead of what the drive has read,
-                    # so without this it keeps playing a disc that is already
-                    # out of the tray — including after a physical eject.
-                    _LOGGER.info("disc pulled while playing track %s, stopping", _cd_current)
-                    try:
-                        await wiim.player.stop()
-                    except Exception as exc:
-                        _LOGGER.warning("could not stop after disc removal: %s", exc)
+                await _stop_for_disc_release("disc pulled")
                 await cdrom.stop_reading()
                 _toc_cache.clear()
                 _cd_current = None
@@ -469,11 +478,12 @@ async def _cd_watcher() -> None:
 @app.post("/api/cd/eject")
 async def cd_eject():
     global _cd_current
+    await _stop_for_disc_release("ejected from the dashboard")
     await cdrom.stop_reading()
     await asyncio.to_thread(cdrom.eject)
     _toc_cache.clear()
     _cd_current = None
-    return {"ok": True}
+    return {"ok": True, "track": None}
 
 
 # --- Artwork ---
