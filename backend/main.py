@@ -200,19 +200,21 @@ def _track(tracks: list[dict], number: int) -> dict:
 
 @app.get("/api/cd/status")
 async def cd_status():
-    status = await asyncio.to_thread(cdrom.disc_status)
-    if status != "audio":
+    if not await asyncio.to_thread(cdrom.disc_present):
         _toc_cache.clear()
-        return {"status": status, "tracks": 0}
+        return {"status": "no_disc", "tracks": 0}
     tracks = await _toc()
-    return {"status": status, "tracks": len(tracks)}
+    return {"status": "audio" if tracks else "data", "tracks": len(tracks)}
 
 
 @app.get("/api/cd/tracks")
 async def cd_tracks(refresh: bool = False):
-    if await asyncio.to_thread(cdrom.disc_status) != "audio":
-        raise HTTPException(status_code=404, detail="No audio CD in the drive")
-    return await _toc(refresh)
+    if not await asyncio.to_thread(cdrom.disc_present):
+        raise HTTPException(status_code=404, detail="No disc in the drive")
+    tracks = await _toc(refresh)
+    if not tracks:
+        raise HTTPException(status_code=404, detail="Disc has no audio tracks")
+    return tracks
 
 
 @app.get("/api/cd/track/{number}.wav")

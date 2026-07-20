@@ -25,9 +25,12 @@ BITS = 16
 
 CDROM_DISC_STATUS = 0x5326
 _DISC_STATUS = {
-    0: "no_info", 1: "no_disc", 2: "tray_open", 3: "drive_not_ready",
+    0: "no_info", 1: "no_disc", 2: "tray_open", 3: "drive_not_ready", 4: "disc_ok",
     100: "audio", 101: "data", 102: "data", 103: "data", 104: "data", 105: "mixed",
 }
+# This drive answers CDS_DISC_OK (4) for audio discs instead of CDS_AUDIO (100),
+# so presence is all the ioctl is trusted for — the TOC decides if it is audio.
+_NO_DISC = {"no_disc", "tray_open", "drive_not_ready", "no_drive"}
 
 # "  1.     5218 [01:09.43]        0 [00:00.00]    OK   no  2"
 _TOC_LINE = re.compile(r"^\s*(\d+)\.\s+(\d+)\s+\[[\d:.]+\]\s+(\d+)\s+\[")
@@ -50,6 +53,10 @@ def disc_status() -> str:
         return "no_disc"
     finally:
         os.close(fd)
+
+
+def disc_present() -> bool:
+    return disc_status() not in _NO_DISC
 
 
 def read_toc() -> list[dict]:
