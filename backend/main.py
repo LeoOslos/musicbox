@@ -354,6 +354,16 @@ async def _cd_watcher() -> None:
         try:
             if await asyncio.to_thread(cdrom.media_changed):
                 _LOGGER.info("disc swapped, dropping cached TOC")
+                if _cd_current is not None and wiim.player:
+                    # The device buffers far ahead of what the drive has read,
+                    # so without this it keeps playing a disc that is already
+                    # out of the tray — including after a physical eject.
+                    _LOGGER.info("disc pulled while playing track %s, stopping", _cd_current)
+                    try:
+                        await wiim.player.stop()
+                    except Exception as exc:
+                        _LOGGER.warning("could not stop after disc removal: %s", exc)
+                await cdrom.stop_reading()
                 _toc_cache.clear()
                 _cd_current = None
                 _cd_disc += 1

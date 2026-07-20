@@ -420,22 +420,28 @@ input[type="range"]::-moz-range-thumb {
   margin-bottom: 1rem;
 }
 
-/* Acts on the disc, not on the music, so it sits with the disc status */
+/* Acts on the disc, not on the music, so it sits with the disc status.
+   Kept deliberately legible: at 0.5px border and --text-2 it read as absent. */
 .cd-eject {
-  padding: 0.3rem 0.7rem;
-  background: transparent;
-  border: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.34rem 0.8rem;
+  background: rgba(250, 238, 218, 0.06);
+  border: 1px solid var(--text-3);
   border-radius: 8px;
-  color: var(--text-2);
-  font-size: 15px;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
+.cd-eject .eject-icon { font-size: 15px; }
 .cd-eject:hover {
-  background: rgba(250, 238, 218, 0.05);
-  border-color: var(--text-3);
-  color: var(--text-1);
+  background: var(--amber-soft);
+  border-color: var(--amber-light);
+  color: var(--amber-text);
 }
 
 .cd-hint {
