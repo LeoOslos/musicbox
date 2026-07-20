@@ -11,14 +11,20 @@
   --amber-soft:   #FAEEDA;
   --amber-text:   #854F0B;
   --text-1:       #F0EBE3;
-  --text-2:       #8A7E72;
-  --text-3:       #5A5048;
+  /* Raised from #8A7E72 / #5A5048: on a near-black background those sat under
+     the contrast a person can read comfortably, and made the page look tired */
+  --text-2:       #A4988B;
+  --text-3:       #7B6F64;
   --green:        #4A7C59;
   --green-bg:     #1A2B1E;
   --red-bg:       #2B1A1A;
   --red:          #7C4A4A;
   --radius-card:  14px;
   --radius-pill:  20px;
+  /* Anything the eye reads as a measurement — track numbers, times, addresses —
+     is set in mono, so figures line up in a column and the panel reads as an
+     instrument rather than a form */
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
 
 /* ─── Background art ────────────────────────────────── */
@@ -60,6 +66,34 @@ body {
 
 .hidden { display: none !important; }
 
+/* ─── Layout ─────────────────────────────────────────── */
+/* Narrow screens stack, which is the honest order of importance. Wide ones get
+   the shape of an actual player: the machine on the left, the disc you read on
+   the right, and the set-once settings out of the way underneath. */
+main { display: block; }
+
+@media (min-width: 900px) {
+  .container { max-width: 1180px; }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(300px, 350px) 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .deck { grid-column: 1; }
+  .cd-panel { grid-column: 2; grid-row: 1; margin-bottom: 0; }
+  .rack {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1.4fr 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+  .rack .card { margin-bottom: 0; height: 100%; }
+}
+
 /* ─── Header ─────────────────────────────────────────── */
 header {
   display: flex;
@@ -85,7 +119,10 @@ header {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--amber);
+  /* --art-accent is set from the cover of whatever is playing; the amber is the
+     resting colour for when nothing is */
+  background: var(--art-accent, var(--amber));
+  transition: background 0.6s ease;
 }
 
 .config-bar {
@@ -170,6 +207,19 @@ header {
   background: var(--border);
 }
 
+/* With room to spare the cover stops being a thumbnail and becomes the subject */
+@media (min-width: 900px) {
+  .now-playing { flex-direction: column; gap: 0.95rem; }
+  .artwork {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+  .track-title { font-size: 20px; white-space: normal; }
+}
+
 .track-info {
   flex: 1;
   min-width: 0;
@@ -216,12 +266,14 @@ header {
 }
 .progress-fill {
   height: 100%;
-  background: var(--amber);
+  background: var(--art-accent, var(--amber));
   border-radius: 2px;
-  transition: width 1s linear;
+  transition: width 1s linear, background 0.6s ease;
 }
 
 .progress-times {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -242,7 +294,7 @@ header {
 }
 
 #play-status.is-playing {
-  color: var(--amber);
+  color: var(--art-accent, var(--amber));
 }
 
 #play-status.is-playing::before {
@@ -251,7 +303,7 @@ header {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--amber);
+  background: var(--art-accent, var(--amber));
   animation: pulse 1.8s ease-in-out infinite;
 }
 
@@ -612,8 +664,8 @@ input[type="range"]::-moz-range-thumb {
 /* A title the user typed is worth telling apart from one out of a database */
 .cd-track-edit.edited { color: var(--amber-text); opacity: 0.9; }
 
-.cd-track-num { font-size: 13px; font-weight: 500; }
-.cd-track-dur { font-size: 10px; color: var(--text-3); }
+.cd-track-num { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+.cd-track-dur { font-family: var(--mono); font-size: 10px; color: var(--text-3); }
 .cd-track.active .cd-track-dur { color: var(--amber-text); }
 
 /* ─── EQ ─────────────────────────────────────────────── */

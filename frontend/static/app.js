@@ -5,6 +5,144 @@ let wsRetryDelay = 2000;
 let progressTimer = null;
 let state = {};
 
+// --- Colour from the cover ---
+//
+// The page takes its accent from whatever is playing instead of a fixed amber.
+// This only works because /api/artwork is proxied by our own backend: an image
+// served straight from the WiiM would taint the canvas and readPixels would throw.
+
+const ART_FALLBACK = '#BA7517';
+
+// The device reports our own stream URL as the title — that is how a disc is
+// told apart from Spotify or anything else playing.
+const CD_URL_MARK = '/api/cd/track/';
+
+// Picks the most present colour that is actually a colour: near-black, near-white
+// and grey pixels are skipped, because averaging them gives mud every time.
+function coverAccent(img) {
+  const size = 24;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, size, size);
+  let data;
+  try {
+    data = ctx.getImageData(0, 0, size, size).data;
+  } catch {
+    return null;  // tainted canvas: leave the fixed palette alone
+  }
+  const buckets = new Map();
+  for (let i = 0; i < data.length; i += 4) {
+    const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+    if (a < 128) continue;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    if (max < 45 || min > 225 || max - min < 28) continue;
+    const key = `${r >> 4},${g >> 4},${b >> 4}`;
+    const seen = buckets.get(key) || { r: 0, g: 0, b: 0, n: 0 };
+    buckets.set(key, { r: seen.r + r, g: seen.g + g, b: seen.b + b, n: seen.n + 1 });
+  }
+  let best = null;
+  for (const bucket of buckets.values()) {
+    if (!best || bucket.n > best.n) best = bucket;
+  }
+  if (!best) return null;
+  return lift(best.r / best.n, best.g / best.n, best.b / best.n);
+}
+
+// A dark cover would hand us a dark accent, which then disappears against the
+// page. Accents are pushed into a band that stays legible on near-black.
+function lift(r, g, b) {
+  const max = Math.max(r, g, b) || 1;
+  const scale = Math.min(235 / max, 2.2);
+  const mix = (v) => Math.round(Math.min(235, Math.max(70, v * scale)));
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+function setAccent(colour) {
+  document.documentElement.style.setProperty('--art-accent', colour || ART_FALLBACK);
+}
+
+// --- The cover a CD does not have ---
+//
+// A disc carries no artwork, and the WiiM answers with its own manufacturer logo
+// — a black square, which is what made the page look dead while a CD played. So
+// we draw the cover from what the disc itself tells us: one arc per track, each
+// as long as the track lasts, with the one playing lit. The sleeve is the TOC.
+
+let coverHue = 210;
+
+// Same album, same colour, every time — derived from the name, not random.
+function albumHue(name) {
+  let hash = 0;
+  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) % 3600;
+  return hash / 10;
+}
+
+function discCover(album, artist, tracks, current) {
+  const S = 640;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext('2d');
+  const hue = coverHue;
+
+  const bg = ctx.createRadialGradient(S * 0.5, S * 0.42, S * 0.05, S * 0.5, S * 0.5, S * 0.75);
+  bg.addColorStop(0, `hsl(${hue}, 34%, 22%)`);
+  bg.addColorStop(1, `hsl(${(hue + 28) % 360}, 40%, 8%)`);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, S, S);
+
+  const total = tracks.reduce((sum, t) => sum + t.seconds, 0) || 1;
+  const radius = S * 0.375;
+  const gap = 0.014;
+  let angle = -Math.PI / 2;
+  ctx.lineCap = 'butt';
+  tracks.forEach(t => {
+    const sweep = (t.seconds / total) * Math.PI * 2;
+    const playing = t.number === current;
+    ctx.beginPath();
+    ctx.arc(S / 2, S / 2, radius, angle + gap / 2, angle + sweep - gap / 2);
+    ctx.strokeStyle = playing ? `hsl(${hue}, 85%, 68%)` : `hsla(${hue}, 45%, 78%, 0.26)`;
+    ctx.lineWidth = playing ? 15 : 6;
+    ctx.stroke();
+    angle += sweep;
+  });
+
+  // No centre hole: it collided with the title, and the ring already reads as
+  // a disc without it.
+  ctx.textAlign = 'center';
+  ctx.fillStyle = `hsla(${hue}, 30%, 92%, 0.62)`;
+  ctx.font = '500 20px Inter, system-ui, sans-serif';
+  ctx.letterSpacing = '2px';
+  ctx.fillText((artist || '').toUpperCase(), S / 2, S * 0.4, S * 0.56);
+  ctx.letterSpacing = '0px';
+
+  ctx.fillStyle = 'rgba(250, 246, 240, 0.96)';
+  const lines = wrapText(ctx, album || 'Disco sin nombre', S * 0.5, 44);
+  lines.forEach((line, i) => {
+    ctx.font = '500 44px Inter, system-ui, sans-serif';
+    ctx.fillText(line, S / 2, S * 0.5 + 16 + i * 52, S * 0.58);
+  });
+  return canvas.toDataURL('image/png');
+}
+
+function wrapText(ctx, text, maxWidth, size) {
+  ctx.font = `500 ${size}px Inter, system-ui, sans-serif`;
+  const words = String(text).split(' ');
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word;
+    if (ctx.measureText(next).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.slice(0, 3);
+}
+
 // --- API helpers ---
 
 async function post(path) {
@@ -92,6 +230,41 @@ function connectWS() {
 
 let lastArtworkKey = null;
 
+// Both covers land here: the drawn one for a disc, the device's own for anything
+// else. Reloaded only when the key changes, so this runs once per track, never
+// per state push.
+function refreshCover(s, onDisc) {
+  const art = $('artwork'), bgArt = $('bg-art');
+  const key = onDisc
+    ? `cd|${cdAlbumTitle}|${cdTracks.length}|${s.cd_track}`
+    : `${s.title}|${s.artist}`;
+  if (key === lastArtworkKey) return;
+  lastArtworkKey = key;
+
+  const show = (src, accent) => {
+    art.src = src;
+    art.classList.remove('hidden');
+    bgArt.classList.remove('visible');
+    bgArt.src = src;
+    bgArt.onload = () => {
+      bgArt.classList.add('visible');
+      setAccent(accent === undefined ? coverAccent(bgArt) : accent);
+    };
+  };
+
+  if (onDisc && cdTracks.length) {
+    coverHue = albumHue(cdAlbumTitle || cdAlbumArtist || 'CD');
+    show(discCover(cdAlbumTitle, cdAlbumArtist, cdTracks, s.cd_track),
+         `hsl(${coverHue}, 78%, 62%)`);
+  } else if (s.has_artwork) {
+    show(`/api/artwork?t=${Date.now()}`);
+  } else {
+    art.classList.add('hidden');
+    bgArt.classList.remove('visible');
+    setAccent(null);
+  }
+}
+
 function updateUI(s) {
   // Status pill with animated dot
   const statusMap = { play: 'Reproduciendo', pause: 'Pausado', stop: 'Detenido', load: 'Cargando' };
@@ -101,7 +274,7 @@ function updateUI(s) {
 
   // Track. For a disc, the device reports our stream URL as the title, which is
   // no use to anyone — name the track instead.
-  const onDisc = typeof s.title === 'string' && s.title.includes('/api/cd/track/');
+  const onDisc = typeof s.title === 'string' && s.title.includes(CD_URL_MARK);
   const named = onDisc ? cdTracks.find(t => t.number === s.cd_track) : null;
   $('track-title').textContent  = onDisc
     ? (named?.title || `Tema ${s.cd_track ?? ''}`.trim())
@@ -109,23 +282,7 @@ function updateUI(s) {
   $('track-artist').textContent = onDisc ? (cdAlbumArtist || 'CD') : (s.artist || '—');
   $('track-album').textContent  = onDisc ? (cdAlbumTitle || '') : (s.album || '');
 
-  // Artwork — reload only when track changes
-  const artKey = `${s.title}|${s.artist}`;
-  if (artKey !== lastArtworkKey) {
-    lastArtworkKey = artKey;
-    const bgArt = $('bg-art');
-    if (s.has_artwork) {
-      const url = `/api/artwork?t=${Date.now()}`;
-      $('artwork').src = url;
-      $('artwork').classList.remove('hidden');
-      bgArt.classList.remove('visible');
-      bgArt.src = url;
-      bgArt.onload = () => bgArt.classList.add('visible');
-    } else {
-      $('artwork').classList.add('hidden');
-      $('bg-art').classList.remove('visible');
-    }
-  }
+  refreshCover(s, onDisc);
 
   // Progress
   updateProgress(s.position ?? 0, s.duration ?? 0);
@@ -323,6 +480,10 @@ async function loadCd(refresh = false) {
     cdAlbumArtist = s.identified ? (s.artist || '') : '';
     renderCdTracks();
     markCdTrack(s.current);
+    // The drawn cover needs the album name and the track list, which arrive
+    // here — after the state push that first asked for a cover.
+    lastArtworkKey = null;
+    refreshCover(state, typeof state.title === 'string' && state.title.includes(CD_URL_MARK));
   } catch {
     statusEl.textContent = 'Error al leer';
   }
