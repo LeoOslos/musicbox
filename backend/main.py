@@ -1,9 +1,13 @@
+import asyncio
+import os
+import socket
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, WebSocket
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import cdrom
 from .inventory import discover_wiim_ip
 from .wiim_player import WiimManager
 from .ws_manager import WSManager
@@ -159,6 +163,88 @@ async def set_eq_bands(body: dict):
     values = [max(0, min(99, int(v))) for v in bands]
     await _player().set_eq_enabled(True)
     await _player().set_eq_custom(values)
+    return {"ok": True}
+
+
+# --- Audio CD ---
+
+_toc_cache: list[dict] = []
+
+# Port the WiiM must reach us on — the dashboard's own port (see ecosystem.config.js)
+HTTP_PORT = int(os.environ.get("PORT", "8080"))
+
+
+def _local_ip() -> str:
+    """Our address on the interface that reaches the WiiM — the URL it must fetch."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect((wiim.ip or "192.168.1.1", 80))
+        return s.getsockname()[0]
+    finally:
+        s.close()
+
+
+async def _toc(refresh: bool = False) -> list[dict]:
+    global _toc_cache
+    if refresh or not _toc_cache:
+        _toc_cache = await asyncio.to_thread(cdrom.read_toc)
+    return _toc_cache
+
+
+def _track(tracks: list[dict], number: int) -> dict:
+    for t in tracks:
+        if t["number"] == number:
+            return t
+    raise HTTPException(status_code=404, detail=f"Track {number} not on disc")
+
+
+@app.get("/api/cd/status")
+async def cd_status():
+    status = await asyncio.to_thread(cdrom.disc_status)
+    if status != "audio":
+        _toc_cache.clear()
+        return {"status": status, "tracks": 0}
+    tracks = await _toc()
+    return {"status": status, "tracks": len(tracks)}
+
+
+@app.get("/api/cd/tracks")
+async def cd_tracks(refresh: bool = False):
+    if await asyncio.to_thread(cdrom.disc_status) != "audio":
+        raise HTTPException(status_code=404, detail="No audio CD in the drive")
+    return await _toc(refresh)
+
+
+@app.get("/api/cd/track/{number}.wav")
+async def cd_track_audio(number: int):
+    track = _track(await _toc(), number)
+    return StreamingResponse(
+        cdrom.stream_track(number, track["sectors"]),
+        media_type="audio/wav",
+        headers={"Content-Length": str(cdrom.wav_size(track["sectors"]))},
+    )
+
+
+@app.post("/api/cd/play/{number}")
+async def cd_play(number: int):
+    _track(await _toc(), number)
+    url = f"http://{_local_ip()}:{HTTP_PORT}/api/cd/track/{number}.wav"
+    await _player().play_url(url)
+    return {"ok": True, "track": number, "url": url}
+
+
+@app.post("/api/cd/stop")
+async def cd_stop():
+    await _player().stop()
+    await cdrom.stop_reading()
+    return {"ok": True}
+
+
+@app.post("/api/cd/eject")
+async def cd_eject():
+    await cdrom.stop_reading()
+    await asyncio.to_thread(cdrom.eject)
+    _toc_cache.clear()
     return {"ok": True}
 
 
