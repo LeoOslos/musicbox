@@ -420,10 +420,22 @@ input[type="range"]::-moz-range-thumb {
   margin-bottom: 1rem;
 }
 
-/* Set apart from the transport buttons: it acts on the disc, not the music */
+/* Acts on the disc, not on the music, so it sits with the disc status */
 .cd-eject {
-  margin-left: 26px;
+  padding: 0.3rem 0.7rem;
+  background: transparent;
+  border: 0.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-2);
   font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.cd-eject:hover {
+  background: rgba(250, 238, 218, 0.05);
+  border-color: var(--text-3);
+  color: var(--text-1);
 }
 
 .cd-hint {

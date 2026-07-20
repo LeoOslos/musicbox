@@ -187,6 +187,10 @@ CD_WATCH_INTERVAL = 2    # seconds between end-of-track checks while a CD plays
 CD_END_SLACK = 3         # seconds from the end that still count as "finished"
 CD_ADVANCE_SETTLE = 8    # seconds to ignore state while the next track loads
 
+# The device reports the streamed URL as the track title, which is how we tell
+# our own disc audio apart from Spotify, AirPlay or anything else taking over.
+CD_URL_MARK = "/api/cd/track/"
+
 
 def _local_ip() -> str:
     """Our address on the interface that reaches the WiiM — the URL it must fetch."""
@@ -322,9 +326,18 @@ async def _cd_watcher() -> None:
         try:
             await wiim.player.refresh()
             s = wiim.get_state()
+            playing_ours = CD_URL_MARK in (s.get("title") or "")
+            # Something else (Spotify, AirPlay, radio) grabbed the speaker: let
+            # go of the disc, or we would shove the next track over their music
+            # as soon as one of their tracks ended.
+            if s.get("is_playing") and not playing_ours:
+                _LOGGER.info("another source took over, releasing the CD")
+                _cd_current = None
+                _broadcast()
+                continue
             duration = s.get("duration") or 0
             position = s.get("position") or 0
-            if s.get("is_playing") or duration <= 0:
+            if s.get("is_playing") or not playing_ours or duration <= 0:
                 continue
             if position < duration - CD_END_SLACK:
                 continue

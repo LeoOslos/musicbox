@@ -99,10 +99,12 @@ function updateUI(s) {
   statusEl.textContent = statusMap[s.play_state] ?? s.play_state ?? '—';
   statusEl.classList.toggle('is-playing', s.is_playing === true);
 
-  // Track
-  $('track-title').textContent  = s.title  || '—';
-  $('track-artist').textContent = s.artist || '—';
-  $('track-album').textContent  = s.album  || '';
+  // Track. For a disc, the device reports our stream URL as the title, which is
+  // no use to anyone — name the track instead.
+  const onDisc = typeof s.title === 'string' && s.title.includes('/api/cd/track/');
+  $('track-title').textContent  = onDisc ? `Tema ${s.cd_track ?? ''}`.trim() : (s.title || '—');
+  $('track-artist').textContent = onDisc ? 'CD' : (s.artist || '—');
+  $('track-album').textContent  = onDisc ? '' : (s.album || '');
 
   // Artwork — reload only when track changes
   const artKey = `${s.title}|${s.artist}`;
@@ -223,10 +225,15 @@ $('progress-bar-click').addEventListener('click', async e => {
 
 // --- Playback controls ---
 
+// One transport for everything. When the disc is what's playing, prev/next/stop
+// have to drive the CD endpoints — the device has no playlist of its own to
+// step through, each track is a separate stream we push at it.
+const onCd = () => cdCurrent !== null;
+
 $('btn-toggle').addEventListener('click', () => post('/api/toggle'));
-$('btn-prev').addEventListener('click',   () => post('/api/prev'));
-$('btn-next').addEventListener('click',   () => post('/api/next'));
-$('btn-stop').addEventListener('click',   () => post('/api/stop'));
+$('btn-prev').addEventListener('click',   () => onCd() ? postCd('/api/cd/prev') : post('/api/prev'));
+$('btn-next').addEventListener('click',   () => onCd() ? postCd('/api/cd/next') : post('/api/next'));
+$('btn-stop').addEventListener('click',   () => onCd() ? postCd('/api/cd/stop') : post('/api/stop'));
 
 // --- Volume ---
 
@@ -315,17 +322,6 @@ function renderCdTracks() {
     btn.addEventListener('click', () => postCd(`/api/cd/play/${btn.dataset.track}`));
   });
 }
-
-$('btn-cd-play').addEventListener('click', () => {
-  // Already streaming from the disc: this is a pause/resume of the WiiM.
-  // Otherwise start the disc from the selected track (or the first one).
-  if (cdCurrent !== null) return post('/api/toggle');
-  if (cdTracks.length) postCd(`/api/cd/play/${cdTracks[0].number}`);
-});
-
-$('btn-cd-prev').addEventListener('click', () => postCd('/api/cd/prev'));
-$('btn-cd-next').addEventListener('click', () => postCd('/api/cd/next'));
-$('btn-cd-stop').addEventListener('click', () => postCd('/api/cd/stop'));
 
 $('btn-cd-eject').addEventListener('click', async () => {
   await postCd('/api/cd/eject');
