@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import socket
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, WebSocket
@@ -179,6 +180,7 @@ async def set_eq_bands(body: dict):
 _toc_cache: list[dict] = []
 _cd_current: int | None = None  # track being played from the disc, for prev/next
 _cd_disc = 0                    # bumped on every disc swap, tells the UI to reload
+_cd_autoplay_until: float | None = None  # deadline for starting a freshly loaded disc
 
 # Port the WiiM must reach us on — the dashboard's own port (see ecosystem.config.js)
 HTTP_PORT = int(os.environ.get("PORT", "8080"))
@@ -190,6 +192,10 @@ CD_ADVANCE_SETTLE = 8    # seconds to ignore state while the next track loads
 # The device reports the streamed URL as the track title, which is how we tell
 # our own disc audio apart from Spotify, AirPlay or anything else taking over.
 CD_URL_MARK = "/api/cd/track/"
+
+# How long to keep trying to start a disc after the tray closes. The drive needs
+# a few seconds to be readable, and gives up rather than starting music late.
+CD_AUTOPLAY_WINDOW = 40
 
 
 def _local_ip() -> str:
@@ -300,6 +306,34 @@ async def cd_stop():
     return {"ok": True, "track": None}
 
 
+async def _try_autoplay() -> None:
+    """Start a disc that was just loaded, but only into a silent speaker.
+
+    Anything already playing wins: putting a disc in should never cut off music
+    someone chose. The drive is not readable the instant the tray closes, so
+    this is retried for CD_AUTOPLAY_WINDOW seconds and then dropped.
+    """
+    global _cd_autoplay_until
+    if time.monotonic() > _cd_autoplay_until:
+        _LOGGER.info("gave up on auto-starting the disc")
+        _cd_autoplay_until = None
+        return
+    if await asyncio.to_thread(cdrom.disc_state) != "present" or not wiim.player:
+        return
+    tracks = await _toc()
+    if not tracks:
+        return
+    await wiim.player.refresh()
+    if wiim.get_state().get("is_playing"):
+        _LOGGER.info("disc loaded while something else plays — leaving it alone")
+        _cd_autoplay_until = None
+        return
+    _cd_autoplay_until = None
+    _LOGGER.info("disc loaded and speaker idle, starting track %s", tracks[0]["number"])
+    await _cd_play(tracks[0]["number"])
+    _broadcast()
+
+
 async def _cd_watcher() -> None:
     """Advance to the next track when the current one runs out.
 
@@ -309,7 +343,12 @@ async def _cd_watcher() -> None:
     what tells the two apart. A pause in the last CD_END_SLACK seconds of a
     track will advance; that is the accepted cost of the ambiguity.
     """
-    global _cd_current, _cd_disc
+    global _cd_current, _cd_disc, _cd_autoplay_until
+    # The kernel always reports "media changed" on the first read, so consume it
+    # here: on startup that is not a disc someone just put in, and acting on it
+    # would start playing music every time the service restarts.
+    await asyncio.to_thread(cdrom.media_changed)
+
     while True:
         await asyncio.sleep(CD_WATCH_INTERVAL)
         try:
@@ -318,7 +357,10 @@ async def _cd_watcher() -> None:
                 _toc_cache.clear()
                 _cd_current = None
                 _cd_disc += 1
+                _cd_autoplay_until = time.monotonic() + CD_AUTOPLAY_WINDOW
                 _broadcast()
+            if _cd_autoplay_until is not None:
+                await _try_autoplay()
         except Exception as exc:
             _LOGGER.warning("media change check failed: %s", exc)
         if _cd_current is None or not wiim.player:
