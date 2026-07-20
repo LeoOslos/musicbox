@@ -30,7 +30,10 @@ _DISC_STATUS = {
 }
 # This drive answers CDS_DISC_OK (4) for audio discs instead of CDS_AUDIO (100),
 # so presence is all the ioctl is trusted for — the TOC decides if it is audio.
-_NO_DISC = {"no_disc", "tray_open", "drive_not_ready", "no_drive"}
+_ABSENT = {"no_disc", "tray_open", "no_drive"}
+# A busy or spun-down drive answers these; they mean "cannot tell right now",
+# not "no disc" — treating them as absence would drop the disc mid-playback.
+_UNKNOWN = {"drive_not_ready", "no_info", "unknown"}
 
 # "  1.     5218 [01:09.43]        0 [00:00.00]    OK   no  2"
 _TOC_LINE = re.compile(r"^\s*(\d+)\.\s+(\d+)\s+\[[\d:.]+\]\s+(\d+)\s+\[")
@@ -55,8 +58,14 @@ def disc_status() -> str:
         os.close(fd)
 
 
-def disc_present() -> bool:
-    return disc_status() not in _NO_DISC
+def disc_state() -> str:
+    """'present' | 'absent' | 'unknown' — three states on purpose, see _UNKNOWN."""
+    status = disc_status()
+    if status in _ABSENT:
+        return "absent"
+    if status in _UNKNOWN:
+        return "unknown"
+    return "present"
 
 
 def read_toc() -> list[dict]:

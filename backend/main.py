@@ -13,7 +13,8 @@ from .inventory import discover_wiim_ip
 from .wiim_player import WiimManager
 from .ws_manager import WSManager
 
-_LOGGER = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+_LOGGER = logging.getLogger("cd")
 
 wiim = WiimManager()
 ws_mgr = WSManager()
@@ -213,11 +214,15 @@ def _track(tracks: list[dict], number: int) -> dict:
 @app.get("/api/cd/status")
 async def cd_status():
     global _cd_current
-    if not await asyncio.to_thread(cdrom.disc_present):
+    state = await asyncio.to_thread(cdrom.disc_state)
+    if state == "absent":
+        if _cd_current is not None:
+            _LOGGER.info("disc gone, clearing CD state (was track %s)", _cd_current)
         _toc_cache.clear()
         _cd_current = None
         return {"status": "no_disc", "tracks": 0, "current": None}
-    tracks = await _toc()
+    # 'unknown' (drive busy or asleep): keep whatever we already know
+    tracks = _toc_cache if state == "unknown" else await _toc()
     return {
         "status": "audio" if tracks else "data",
         "tracks": len(tracks),
@@ -227,7 +232,7 @@ async def cd_status():
 
 @app.get("/api/cd/tracks")
 async def cd_tracks(refresh: bool = False):
-    if not await asyncio.to_thread(cdrom.disc_present):
+    if await asyncio.to_thread(cdrom.disc_state) == "absent":
         raise HTTPException(status_code=404, detail="No disc in the drive")
     tracks = await _toc(refresh)
     if not tracks:
@@ -261,7 +266,9 @@ async def cd_play(number: int):
 
 @app.post("/api/cd/next")
 async def cd_next():
-    tracks = await _toc()
+    # Re-read rather than trust an empty cache: stopping because the TOC went
+    # missing would look exactly like reaching the end of the disc.
+    tracks = await _toc(refresh=not _toc_cache)
     numbers = [t["number"] for t in tracks]
     after = [n for n in numbers if _cd_current is None or n > _cd_current]
     if not after:
@@ -290,10 +297,11 @@ async def cd_stop():
 async def _cd_watcher() -> None:
     """Advance to the next track when the current one runs out.
 
-    A finished stream shows up as play_state 'stop' with position at duration
-    (measured: 58/58 on a 58s track). A stop from the dashboard clears
-    _cd_current, and a stop from elsewhere mid-track lands far from the end,
-    so neither is mistaken for a track ending.
+    Measured on the device: a finished stream ends up not playing with position
+    at duration (58/58 on a 58s track). pywiim reports play_state 'pause' there,
+    the same value as a real pause — so the position, not the state name, is
+    what tells the two apart. A pause in the last CD_END_SLACK seconds of a
+    track will advance; that is the accepted cost of the ambiguity.
     """
     while True:
         await asyncio.sleep(CD_WATCH_INTERVAL)
@@ -304,11 +312,11 @@ async def _cd_watcher() -> None:
             s = wiim.get_state()
             duration = s.get("duration") or 0
             position = s.get("position") or 0
-            if s.get("play_state") != "stop" or duration <= 0:
+            if s.get("is_playing") or duration <= 0:
                 continue
             if position < duration - CD_END_SLACK:
                 continue
-            _LOGGER.info("CD track %s finished, advancing", _cd_current)
+            _LOGGER.info("track %s finished (%s/%s), advancing", _cd_current, position, duration)
             await cd_next()
             # The device reports the old stopped state for a moment while the
             # next track loads — don't read that as another track ending.
