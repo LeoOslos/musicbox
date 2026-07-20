@@ -305,7 +305,7 @@ async function loadCd(refresh = false) {
       statusEl.textContent = s.status === 'no_disc' ? 'Sin disco' : 'Disco sin audio';
       $('cd-tracks').innerHTML = '';
       $('btn-cd-identify').classList.add('hidden');
-      $('cd-candidates').classList.add('hidden');
+      $('cd-identify-panel').classList.add('hidden');
       cdTracks = [];
       return;
     }
@@ -350,44 +350,75 @@ function renderCdTracks() {
 
 // Opt-in on purpose: an unidentified disc still plays and is fully controllable,
 // so this never interrupts. Nothing is applied without the user choosing it.
-$('btn-cd-identify').addEventListener('click', async () => {
+function renderCandidates(list, box) {
+  const escapeRow = `
+    <button class="cd-candidate cd-candidate-none" data-none="1">
+      <span class="cd-candidate-album">No estoy seguro</span>
+      <span>${cdIdentified ? 'quitar los nombres guardados' : 'dejarlo sin nombres por ahora'}</span>
+    </button>`;
+  box.innerHTML = escapeRow + list.map(c => `
+    <button class="cd-candidate" data-release="${esc(c.release_id)}">
+      <span class="cd-candidate-album">${esc(c.album || '—')}</span>
+      <span>${esc(c.artist || '')}</span>
+      <span class="cd-candidate-first">${esc(c.tracks['1'] || '')}</span>
+      ${c.exact === false ? `<span class="cd-candidate-warn">${c.track_count} temas, tu disco tiene ${cdTracks.length}</span>` : ''}
+      <span class="cd-candidate-meta">${esc([c.date, c.country].filter(Boolean).join(' · '))}</span>
+    </button>`).join('');
+  wireCandidates(box);
+}
+
+function wireCandidates(box) {
+  box.querySelector('.cd-candidate[data-none]')?.addEventListener('click', async () => {
+    if (cdIdentified) await postCd('/api/cd/forget');
+    $('cd-identify-panel').classList.add('hidden');
+    loadCd();
+  });
+  box.querySelectorAll('.cd-candidate[data-release]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      box.innerHTML = '<div class="cd-candidate">Guardando…</div>';
+      await postCd(`/api/cd/identify/${btn.dataset.release}`);
+      $('cd-identify-panel').classList.add('hidden');
+      loadCd();
+    });
+  });
+}
+
+// Searching by name covers what the TOC search cannot see: a pressing nobody
+// ever registered is invisible to it even when the album is in the database.
+async function searchByName() {
+  const q = $('cd-search').value.trim();
+  if (!q) return;
   const box = $('cd-candidates');
-  if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
-  box.classList.remove('hidden');
+  box.innerHTML = '<div class="cd-candidate">Buscando…</div>';
+  try {
+    const list = await fetch(`/api/cd/search?q=${encodeURIComponent(q)}`).then(r => r.json());
+    if (!Array.isArray(list) || !list.length) {
+      box.innerHTML = '<div class="cd-candidate">Sin resultados para ese nombre</div>';
+      return;
+    }
+    renderCandidates(list, box);
+  } catch {
+    box.innerHTML = '<div class="cd-candidate">No se pudo consultar la base de datos</div>';
+  }
+}
+
+$('btn-cd-search').addEventListener('click', searchByName);
+$('cd-search').addEventListener('keydown', e => { if (e.key === 'Enter') searchByName(); });
+
+$('btn-cd-identify').addEventListener('click', async () => {
+  const panel = $('cd-identify-panel');
+  const box = $('cd-candidates');
+  if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }
+  panel.classList.remove('hidden');
   box.innerHTML = '<div class="cd-candidate">Buscando álbumes que coincidan…</div>';
   try {
     const list = await fetch('/api/cd/candidates').then(r => r.json());
     if (!Array.isArray(list) || !list.length) {
-      box.innerHTML = '<div class="cd-candidate">No se encontró ningún álbum parecido</div>';
+      box.innerHTML = '<div class="cd-candidate">Ninguno coincide por índice — probá buscando por nombre</div>';
+      wireCandidates(box);
       return;
     }
-    const escape = `
-      <button class="cd-candidate cd-candidate-none" data-none="1">
-        <span class="cd-candidate-album">No estoy seguro</span>
-        <span>${cdIdentified ? 'quitar los nombres guardados' : 'dejarlo sin nombres por ahora'}</span>
-      </button>`;
-    box.innerHTML = escape + list.map(c => `
-      <button class="cd-candidate" data-release="${esc(c.release_id)}">
-        <span class="cd-candidate-album">${esc(c.album || '—')}</span>
-        <span>${esc(c.artist || '')}</span>
-        <span class="cd-candidate-first">${esc(c.tracks['1'] || '')}</span>
-        <span class="cd-candidate-meta">${esc([c.date, c.country].filter(Boolean).join(' · '))}</span>
-      </button>`).join('');
-
-    box.querySelector('.cd-candidate[data-none]').addEventListener('click', async () => {
-      if (cdIdentified) await postCd('/api/cd/forget');
-      box.classList.add('hidden');
-      loadCd();
-    });
-
-    box.querySelectorAll('.cd-candidate[data-release]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        box.innerHTML = '<div class="cd-candidate">Guardando…</div>';
-        await postCd(`/api/cd/identify/${btn.dataset.release}`);
-        box.classList.add('hidden');
-        loadCd();
-      });
-    });
+    renderCandidates(list, box);
   } catch {
     box.innerHTML = '<div class="cd-candidate">No se pudo consultar la base de datos</div>';
   }

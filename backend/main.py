@@ -343,6 +343,15 @@ async def cd_candidates():
     return await discs.lookup_candidates(tracks)
 
 
+@app.get("/api/cd/search")
+async def cd_search(q: str):
+    """Find the album by name, for discs the TOC search cannot see."""
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="Nothing to search for")
+    tracks = await _toc()
+    return await discs.search_by_name(q.strip(), len(tracks))
+
+
 @app.post("/api/cd/forget")
 async def cd_forget():
     """Undo an identification, back to plain track numbers."""

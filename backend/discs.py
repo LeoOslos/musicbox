@@ -120,30 +120,43 @@ def _artist(release: dict) -> str:
                    for c in credits if isinstance(c, dict)).strip()
 
 
+def _medium_titles(medium: dict) -> dict[int, str]:
+    titles = {}
+    for track in medium.get("tracks") or []:
+        try:
+            titles[int(track.get("number"))] = track.get("title") or ""
+        except (TypeError, ValueError):
+            continue
+    return titles
+
+
 def _titles(release: dict, count: int) -> dict[int, str]:
-    """Track titles from the medium that matches this disc's track count."""
-    for medium in release.get("media", []):
-        tracks = medium.get("tracks") or []
-        if len(tracks) == count or not any(m.get("tracks") for m in release["media"]):
-            titles = {}
-            for track in tracks:
-                try:
-                    titles[int(track.get("number"))] = track.get("title") or ""
-                except (TypeError, ValueError):
-                    continue
-            if titles:
-                return titles
-    return {}
+    """Track titles, preferring the medium with this disc's track count.
+
+    Falls back to the closest medium: a pressing with a different track count
+    can still be the album the person is looking at, and naming what we can
+    beats naming nothing. The caller flags the mismatch.
+    """
+    media = [m for m in release.get("media", []) if m.get("tracks")]
+    if not media:
+        return {}
+    exact = [m for m in media if len(m["tracks"]) == count]
+    chosen = exact[0] if exact else min(media, key=lambda m: abs(len(m["tracks"]) - count))
+    return _medium_titles(chosen)
 
 
 def _as_entry(release: dict, count: int) -> dict:
+    titles = _titles(release, count)
     return {
         "release_id": release.get("id"),
         "album": release.get("title"),
         "artist": _artist(release),
         "date": release.get("date"),
         "country": release.get("country"),
-        "tracks": {str(n): t for n, t in _titles(release, count).items()},
+        "track_count": len(titles),
+        # Names for a pressing with a different track count will not line up
+        "exact": len(titles) == count,
+        "tracks": {str(n): t for n, t in titles.items()},
     }
 
 
@@ -164,6 +177,37 @@ async def lookup_candidates(tracks: list[dict], limit: int = 12) -> list[dict]:
     releases = (data or {}).get("releases") or []
     entries = [_as_entry(r, len(tracks)) for r in releases]
     return [e for e in entries if e["tracks"]][:limit]
+
+
+async def search_by_name(query: str, count: int, limit: int = 12) -> list[dict]:
+    """Text search, for pressings nobody ever registered as a physical disc.
+
+    The TOC search only matches releases someone submitted a disc ID for, so a
+    perfectly well known album can be invisible to it — Carmine Meo is in the
+    database eight times over and none of them matched the disc on the shelf.
+    Titles are not fetched here: that is one call per release, and only the one
+    the user picks is worth spending it on.
+    """
+    data = await _get("release/", {"query": query, "fmt": "json", "limit": str(limit)})
+    results = []
+    for release in (data or {}).get("releases", []):
+        media = release.get("media") or []
+        tracks = sum(m.get("track-count") or 0 for m in media)
+        artists = release.get("artist-credit") or []
+        results.append({
+            "release_id": release.get("id"),
+            "album": release.get("title"),
+            "artist": "".join(c.get("name", "") + c.get("joinphrase", "")
+                              for c in artists if isinstance(c, dict)).strip(),
+            "date": release.get("date"),
+            "country": release.get("country"),
+            "track_count": tracks,
+            "exact": tracks == count,
+            "tracks": {},
+        })
+    # Same track count first: those are the ones whose names will line up
+    results.sort(key=lambda r: (not r["exact"], r.get("date") or ""))
+    return results
 
 
 async def lookup_release(release_id: str, count: int) -> dict | None:
