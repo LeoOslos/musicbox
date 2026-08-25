@@ -11,7 +11,7 @@ let state = {};
 // This only works because /api/artwork is proxied by our own backend: an image
 // served straight from the WiiM would taint the canvas and readPixels would throw.
 
-const ART_FALLBACK = '#BA7517';
+const ART_FALLBACK = '#E39B3A';
 
 // The device reports our own stream URL as the title — that is how a disc is
 // told apart from Spotify or anything else playing.
@@ -234,7 +234,7 @@ let lastArtworkKey = null;
 // else. Reloaded only when the key changes, so this runs once per track, never
 // per state push.
 function refreshCover(s, onDisc) {
-  const art = $('artwork'), bgArt = $('bg-art');
+  const art = $('artwork'), bgArt = $('bg-art'), empty = $('cover-empty');
   const key = onDisc
     ? `cd|${cdAlbumTitle}|${cdTracks.length}|${s.cd_track}`
     : `${s.title}|${s.artist}`;
@@ -244,6 +244,7 @@ function refreshCover(s, onDisc) {
   const show = (src, accent) => {
     art.src = src;
     art.classList.remove('hidden');
+    empty.classList.add('hidden');
     bgArt.classList.remove('visible');
     bgArt.src = src;
     bgArt.onload = () => {
@@ -260,13 +261,20 @@ function refreshCover(s, onDisc) {
     show(`/api/artwork?t=${Date.now()}`);
   } else {
     art.classList.add('hidden');
+    empty.classList.remove('hidden');
     bgArt.classList.remove('visible');
     setAccent(null);
   }
 }
 
+// Input names as the device reports them, written the way the buttons read.
+const SOURCE_NAMES = {
+  wifi: 'Wi-Fi', bluetooth: 'Bluetooth', 'line-in': 'Line-In', line_in: 'Line-In',
+  optical: 'Óptica', hdmi: 'HDMI', udisk: 'USB',
+};
+
 function updateUI(s) {
-  // Status pill with animated dot
+  // Status tag with animated dot
   const statusMap = { play: 'Reproduciendo', pause: 'Pausado', stop: 'Detenido', load: 'Cargando' };
   const statusEl = $('play-status');
   statusEl.textContent = statusMap[s.play_state] ?? s.play_state ?? '—';
@@ -276,11 +284,22 @@ function updateUI(s) {
   // no use to anyone — name the track instead.
   const onDisc = typeof s.title === 'string' && s.title.includes(CD_URL_MARK);
   const named = onDisc ? cdTracks.find(t => t.number === s.cd_track) : null;
-  $('track-title').textContent  = onDisc
+  const title = onDisc
     ? (named?.title || `Tema ${s.cd_track ?? ''}`.trim())
-    : (s.title || '—');
-  $('track-artist').textContent = onDisc ? (cdAlbumArtist || 'CD') : (s.artist || '—');
+    : s.title;
+  $('track-title').textContent  = title || 'Nada sonando';
+  $('track-artist').textContent = onDisc ? (cdAlbumArtist || 'CD') : (s.artist || '');
   $('track-album').textContent  = onDisc ? (cdAlbumTitle || '') : (s.album || '');
+  $('cd-tag').classList.toggle('hidden', !onDisc);
+
+  // Source, shown next to the status instead of only inside the settings panel
+  const srcId = s.source ?? '';
+  const srcChip = $('source-chip');
+  const srcLabel = SOURCE_NAMES[srcId] || s.source_name || srcId;
+  srcChip.textContent = srcLabel;
+  srcChip.classList.toggle('hidden', !srcLabel || onDisc);
+
+  $('dev-name').textContent = s.name || '—';
 
   refreshCover(s, onDisc);
 
@@ -289,7 +308,8 @@ function updateUI(s) {
   restartProgressTimer(s);
 
   // Play button icon
-  $('btn-toggle').innerHTML = s.is_playing ? '&#9646;&#9646;' : '&#9654;';
+  $('icon-play').classList.toggle('hidden', s.is_playing === true);
+  $('icon-pause').classList.toggle('hidden', s.is_playing !== true);
 
   // Volume (only update slider if user isn't dragging)
   if (s.volume !== null && s.volume !== undefined && !isDragging) {
@@ -300,10 +320,9 @@ function updateUI(s) {
   // Mute
   const muteBtn = $('btn-mute');
   muteBtn.classList.toggle('muted', s.muted === true);
-  muteBtn.title = s.muted ? 'Desmutear' : 'Mutear';
+  muteBtn.title = s.muted ? 'Desmutear' : 'Silenciar';
 
   // Source buttons
-  const srcId = s.source ?? '';
   document.querySelectorAll('.source-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.source.replace('-', '_') === srcId || b.dataset.source === srcId);
   });
@@ -335,7 +354,7 @@ function updateUI(s) {
     .map(([k, v]) => `
       <div class="device-field">
         <span class="device-field-label">${k}</span>
-        <span class="device-field-value">${v}</span>
+        <span class="device-field-value">${esc(v)}</span>
       </div>`)
     .join('');
 }
@@ -379,7 +398,7 @@ $('progress-bar-click').addEventListener('click', async e => {
   if (!localDur) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const ratio = (e.clientX - rect.left) / rect.width;
-  const sec = Math.round(ratio * localDur);
+  const sec = Math.round(Math.min(1, Math.max(0, ratio)) * localDur);
   await post(`/api/seek/${sec}`);
 });
 
@@ -390,10 +409,42 @@ $('progress-bar-click').addEventListener('click', async e => {
 // step through, each track is a separate stream we push at it.
 const onCd = () => cdCurrent !== null;
 
-$('btn-toggle').addEventListener('click', () => postCd('/api/transport'));
-$('btn-prev').addEventListener('click',   () => onCd() ? postCd('/api/cd/prev') : post('/api/prev'));
-$('btn-next').addEventListener('click',   () => onCd() ? postCd('/api/cd/next') : post('/api/next'));
-$('btn-stop').addEventListener('click',   () => onCd() ? postCd('/api/cd/stop') : post('/api/stop'));
+const doToggle = () => postCd('/api/transport');
+const doPrev   = () => onCd() ? postCd('/api/cd/prev') : post('/api/prev');
+const doNext   = () => onCd() ? postCd('/api/cd/next') : post('/api/next');
+const doStop   = () => onCd() ? postCd('/api/cd/stop') : post('/api/stop');
+
+$('btn-toggle').addEventListener('click', doToggle);
+$('btn-prev').addEventListener('click',   doPrev);
+$('btn-next').addEventListener('click',   doNext);
+$('btn-stop').addEventListener('click',   doStop);
+
+// --- Keyboard ---
+//
+// This is used mostly from a desktop, where reaching for the mouse to pause is
+// the slowest thing on the page. Ignored while typing in a field.
+
+document.addEventListener('keydown', e => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (['input', 'select', 'textarea'].includes(tag) || e.metaKey || e.ctrlKey || e.altKey) return;
+
+  const nudge = delta => {
+    const slider = $('vol-slider');
+    const v = Math.min(100, Math.max(0, parseInt(slider.value || '0') + delta));
+    slider.value = v;
+    $('vol-label').textContent = v;
+    post(`/api/volume/${v}`);
+  };
+
+  switch (e.key) {
+    case ' ':          e.preventDefault(); doToggle(); break;
+    case 'ArrowLeft':  e.preventDefault(); doPrev();   break;
+    case 'ArrowRight': e.preventDefault(); doNext();   break;
+    case 'ArrowUp':    e.preventDefault(); nudge(+5);  break;
+    case 'ArrowDown':  e.preventDefault(); nudge(-5);  break;
+    case 'm': case 'M': post(`/api/mute/${state.muted ? 0 : 1}`); break;
+  }
+});
 
 // --- Volume ---
 
@@ -401,7 +452,7 @@ let isDragging = false;
 let volDebounce = null;
 
 $('vol-slider').addEventListener('mousedown', () => { isDragging = true; });
-$('vol-slider').addEventListener('touchstart', () => { isDragging = true; });
+$('vol-slider').addEventListener('touchstart', () => { isDragging = true; }, { passive: true });
 $('vol-slider').addEventListener('mouseup',   () => { isDragging = false; });
 $('vol-slider').addEventListener('touchend',  () => { isDragging = false; });
 
@@ -420,6 +471,24 @@ $('btn-mute').addEventListener('click', () => {
 
 document.querySelectorAll('.source-btn').forEach(btn => {
   btn.addEventListener('click', () => post(`/api/source/${btn.dataset.source}`));
+});
+
+// --- Settings tabs ---
+//
+// Closed by default and one at a time: these are set once and then only get in
+// the way of the thing the page is actually for.
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.panel;
+    const wasOpen = tab.classList.contains('active');
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+    if (!wasOpen) {
+      tab.classList.add('active');
+      $(`panel-${target}`).classList.remove('hidden');
+    }
+  });
 });
 
 // --- CD ---
@@ -453,13 +522,17 @@ function markCdTrack(number) {
 // The TOC is cached server-side because reading it spins up the drive; the
 // backend watches for disc swaps and tells us to reload through cd_disc.
 async function loadCd(refresh = false) {
-  const statusEl = $('cd-status');
+  const statusEl = $('cd-status'), shapeEl = $('cd-shape');
   statusEl.textContent = 'Leyendo…';
   try {
     const s = await fetch('/api/cd/status').then(r => r.json());
     if (s.disc !== undefined) cdDisc = s.disc;
     if (s.status !== 'audio') {
+      // No disc: the column disappears instead of sitting there empty, and the
+      // stage closes up around what is playing.
+      document.body.classList.remove('has-disc');
       statusEl.textContent = s.status === 'no_disc' ? 'Sin disco' : 'Disco sin audio';
+      shapeEl.textContent = '';
       $('cd-tracks').innerHTML = '';
       $('btn-cd-identify').classList.add('hidden');
       $('cd-identify-panel').classList.add('hidden');
@@ -467,14 +540,15 @@ async function loadCd(refresh = false) {
       return;
     }
     cdTracks = await fetch(`/api/cd/tracks${refresh ? '?refresh=true' : ''}`).then(r => r.json());
+    document.body.classList.add('has-disc');
     const total = cdTracks.reduce((a, t) => a + t.seconds, 0);
-    const shape = `${cdTracks.length} temas · ${fmtTime(total)}`;
     statusEl.textContent = s.identified && s.album
-      ? `${s.album}${s.artist ? ' · ' + s.artist : ''} — ${shape}`
-      : shape;
+      ? `${s.album}${s.artist ? ' · ' + s.artist : ''}`
+      : 'Disco sin identificar';
+    shapeEl.textContent = `${cdTracks.length} temas · ${fmtTime(total)}`;
     // Always offered, never forced: an identification can also be corrected
     $('btn-cd-identify').classList.remove('hidden');
-    $('btn-cd-identify').textContent = s.identified ? 'Cambiar nombres' : 'Identificar disco';
+    $('btn-cd-identify').textContent = s.identified ? 'Cambiar' : 'Identificar';
     cdIdentified = !!s.identified;
     cdAlbumTitle = s.identified ? (s.album || '') : '';
     cdAlbumArtist = s.identified ? (s.artist || '') : '';
@@ -494,14 +568,13 @@ const esc = s => String(s).replace(/[&<>"]/g, c => (
 
 function renderCdTracks() {
   const named = cdTracks.some(t => t.title);
-  $('cd-tracks').classList.toggle('named', named);
   $('cd-tracks').innerHTML = cdTracks.map(t => `
     <button class="cd-track" data-track="${t.number}" title="${esc(t.title || 'Tema ' + t.number)}">
       <span class="cd-track-num">${t.number}</span>
-      ${t.title ? `<span class="cd-track-name">${esc(t.title)}</span>` : ''}
+      <span class="cd-track-name">${esc(t.title || 'Tema ' + t.number)}</span>
       <span class="cd-track-dur">${fmtTime(t.seconds)}</span>
       ${named ? `<span class="cd-track-edit${t.edited ? ' edited' : ''}" data-edit="${t.number}"
-        role="button" tabindex="0" title="Corregir el nombre">✎</span>` : ''}
+        role="button" tabindex="0" title="Corregir el nombre">✎</span>` : '<span></span>'}
     </button>`).join('');
 
   document.querySelectorAll('.cd-track').forEach(btn => {

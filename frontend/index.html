@@ -3,114 +3,154 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0B0A09">
   <title>WiiM</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <img id="bg-art" class="bg-art" src="" alt="">
-  <div class="container">
 
-    <header>
-      <div class="brand">
-        <span class="brand-dot"></span>WiiM
-      </div>
+  <!-- Ambient: the cover, blurred and pushed far back. The scrim above it is what
+       keeps text readable no matter how bright the artwork is. -->
+  <div class="ambient">
+    <img id="bg-art" class="ambient-art" src="" alt="">
+    <div class="ambient-scrim"></div>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span class="brand-name">WiiM</span>
+      <span class="brand-sep">/</span>
+      <span id="dev-name" class="brand-device">—</span>
+    </div>
+    <div class="topbar-right">
       <div class="config-bar">
-        <input id="ip-input" type="text" placeholder="192.168.1.x">
+        <input id="ip-input" type="text" placeholder="192.168.1.x" aria-label="IP del equipo">
         <button id="btn-connect">Conectar</button>
-        <span id="conn-status" class="badge disconnected">Desconectado</span>
       </div>
-    </header>
+      <span id="conn-status" class="badge disconnected">Desconectado</span>
+    </div>
+  </header>
 
-    <main id="main" class="hidden">
+  <main id="main" class="hidden">
 
-      <!-- The front of the machine: what is playing and the hands-on controls -->
-      <div class="deck">
+    <!-- Stage: cover, what's playing, and the disc when there is one -->
+    <section class="stage">
 
-      <!-- Now playing -->
-      <section class="card now-playing">
-        <img id="artwork" src="" alt="" class="artwork hidden">
-        <div class="track-info">
-          <div class="track-meta">
-            <div id="track-title" class="track-title">—</div>
-            <div id="track-artist" class="track-artist">—</div>
-            <div id="track-album" class="track-album"></div>
-          </div>
-          <div class="progress-wrap">
-            <div class="progress-bar" id="progress-bar-click">
-              <div id="progress-fill" class="progress-fill" style="width:0%"></div>
-            </div>
-            <div class="progress-times">
-              <span id="pos-label">0:00</span>
-              <span id="play-status">—</span>
-              <span id="dur-label">0:00</span>
-            </div>
+      <div class="cover-col">
+        <div class="cover-frame">
+          <img id="artwork" src="" alt="" class="cover hidden">
+          <div id="cover-empty" class="cover-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+              <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/>
+            </svg>
+            <span>Sin carátula</span>
           </div>
         </div>
-      </section>
+      </div>
 
-      <!-- Transport -->
-      <section class="card player">
-        <div class="controls">
-          <button id="btn-prev"   class="ctrl-sm"  title="Anterior">&#9664;&#9664;</button>
-          <button id="btn-stop"   class="ctrl-sm"  title="Stop">&#9632;</button>
-          <button id="btn-toggle" class="ctrl-play" title="Play/Pause">&#9654;</button>
-          <button id="btn-next"   class="ctrl-sm"  title="Siguiente">&#9654;&#9654;</button>
+      <div class="now-col">
+        <div class="now-tags">
+          <span id="play-status" class="tag tag-status">—</span>
+          <span id="source-chip" class="tag hidden"></span>
+          <span id="cd-tag" class="tag tag-cd hidden">CD</span>
         </div>
-      </section>
 
-      <!-- Volume -->
-      <section class="card volume-section">
-        <span class="section-label">Volumen</span>
+        <h1 id="track-title" class="track-title">Nada sonando</h1>
+        <p id="track-artist" class="track-artist"></p>
+        <p id="track-album" class="track-album"></p>
+
+        <div class="progress-wrap">
+          <div class="progress-bar" id="progress-bar-click" role="slider" tabindex="0"
+               aria-label="Posición del tema">
+            <div id="progress-fill" class="progress-fill" style="width:0%">
+              <span class="progress-knob"></span>
+            </div>
+          </div>
+          <div class="progress-times">
+            <span id="pos-label" class="mono">0:00</span>
+            <span id="dur-label" class="mono">0:00</span>
+          </div>
+        </div>
+
+        <div class="transport">
+          <button id="btn-prev" class="ctrl" title="Anterior" aria-label="Anterior">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 6h2.2v12H7zM19 6v12l-9-6z"/></svg>
+          </button>
+          <button id="btn-toggle" class="ctrl ctrl-play" title="Play / Pausa" aria-label="Play o pausa">
+            <svg id="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+            <svg id="icon-pause" class="hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 5.5h3.2v13H7.5zM13.3 5.5h3.2v13h-3.2z"/></svg>
+          </button>
+          <button id="btn-stop" class="ctrl" title="Detener" aria-label="Detener">
+            <svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+          </button>
+          <button id="btn-next" class="ctrl" title="Siguiente" aria-label="Siguiente">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.8 6H17v12h-2.2zM5 6l9 6-9 6z"/></svg>
+          </button>
+        </div>
+
         <div class="vol-row">
-          <button id="btn-mute" class="mute-btn" title="Mute">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <button id="btn-mute" class="mute-btn" title="Silenciar" aria-label="Silenciar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path class="wave-1" d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path class="wave-2" d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              <path class="mute-slash" d="M17 9l5 6M22 9l-5 6"/>
             </svg>
           </button>
-          <input id="vol-slider" type="range" min="0" max="100" value="50">
-          <span id="vol-label">50</span>
+          <input id="vol-slider" type="range" min="0" max="100" value="50" aria-label="Volumen">
+          <span id="vol-label" class="mono vol-label">50</span>
         </div>
-      </section>
 
-      </div><!-- /deck -->
+        <p class="kbd-hint">
+          <kbd>espacio</kbd> play · <kbd>←</kbd><kbd>→</kbd> tema · <kbd>↑</kbd><kbd>↓</kbd> volumen
+        </p>
+      </div>
 
-      <!-- The disc: the panel you actually read while it plays -->
-      <section class="card cd-panel">
-        <div class="cd-section">
-          <div class="cd-head">
-            <span class="section-label">CD</span>
-            <span id="cd-status" class="cd-status">—</span>
-            <button id="btn-cd-identify" class="cd-identify hidden"
-                    title="Buscar el nombre de los temas">Identificar disco</button>
-            <button id="btn-cd-eject" class="cd-eject" title="Expulsar el disco">
-              <span class="eject-icon">&#9167;</span>Expulsar
-            </button>
+      <!-- Disc column: only takes room on screen when a disc is in the drive -->
+      <aside class="disc-col" id="disc-col">
+        <div class="disc-head">
+          <div class="disc-titles">
+            <span class="disc-label">Disco</span>
+            <span id="cd-status" class="disc-name">—</span>
+            <span id="cd-shape" class="disc-shape mono"></span>
           </div>
-          <div class="cd-identify-panel hidden" id="cd-identify-panel">
-            <div class="cd-search-row">
-              <input id="cd-search" type="text" placeholder="Buscar por nombre: álbum o artista">
-              <button id="btn-cd-search" class="btn-ghost">Buscar</button>
-            </div>
-            <div class="cd-candidates" id="cd-candidates"></div>
+          <div class="disc-actions">
+            <button id="btn-cd-identify" class="btn-ghost hidden" title="Buscar el nombre de los temas">Identificar</button>
+            <button id="btn-cd-eject" class="btn-ghost" title="Expulsar el disco">Expulsar</button>
           </div>
-          <div class="cd-tracks" id="cd-tracks"></div>
-          <p class="cd-hint">Con el equipo en silencio, <strong>▶</strong> arranca el disco;
-            tocá un número para ir a un tema puntual. Llega por la red, así que el WiiM
-            queda en <strong>Wi-Fi</strong> solo.</p>
         </div>
-      </section>
 
-      <!-- Set once and forgotten: kept together, out of the way -->
-      <div class="rack">
+        <div class="cd-identify-panel hidden" id="cd-identify-panel">
+          <div class="cd-search-row">
+            <input id="cd-search" type="text" placeholder="Buscar por álbum o artista">
+            <button id="btn-cd-search" class="btn-ghost">Buscar</button>
+          </div>
+          <div class="cd-candidates" id="cd-candidates"></div>
+        </div>
 
-      <!-- Source -->
-      <section class="card source-section">
-        <span class="section-label">Fuente</span>
+        <div class="cd-tracks" id="cd-tracks"></div>
+
+        <p class="cd-hint" id="cd-hint">
+          Con el equipo en silencio, <strong>▶</strong> arranca el disco; tocá un tema para ir a ese.
+          Llega por la red, así que el WiiM queda en <strong>Wi-Fi</strong>.
+        </p>
+      </aside>
+
+    </section>
+
+    <!-- Set once and forgotten: behind tabs, closed by default -->
+    <section class="settings">
+      <nav class="tabs" role="tablist">
+        <button class="tab" data-panel="source" role="tab">Fuente</button>
+        <button class="tab" data-panel="eq" role="tab">Ecualizador</button>
+        <button class="tab" data-panel="device" role="tab">Dispositivo</button>
+      </nav>
+
+      <div class="panel hidden" id="panel-source" role="tabpanel">
         <div class="source-grid">
           <button class="source-btn" data-source="wifi">Wi-Fi</button>
           <button class="source-btn" data-source="bluetooth">Bluetooth</button>
@@ -118,29 +158,23 @@
           <button class="source-btn" data-source="optical">Optical</button>
           <button class="source-btn" data-source="hdmi">HDMI</button>
         </div>
-      </section>
+      </div>
 
-      <!-- EQ -->
-      <section class="card eq-section">
-        <span class="section-label">Ecualizador</span>
+      <div class="panel hidden" id="panel-eq" role="tabpanel">
         <div class="eq-row">
-          <select id="eq-select"><option value="">Cargando…</option></select>
-          <button id="btn-eq-apply" class="btn-amber-outline">Aplicar</button>
+          <select id="eq-select" aria-label="Preset de ecualizador"><option value="">Cargando…</option></select>
+          <button id="btn-eq-apply" class="btn-accent">Aplicar</button>
           <button id="btn-eq-flat" class="btn-ghost">Flat</button>
         </div>
         <div class="eq-bands" id="eq-bands"></div>
-      </section>
+      </div>
 
-      <!-- Device info -->
-      <section class="card device-info">
-        <span class="section-label">Dispositivo</span>
+      <div class="panel hidden" id="panel-device" role="tabpanel">
         <div id="device-details" class="device-details">—</div>
-      </section>
+      </div>
+    </section>
 
-      </div><!-- /rack -->
-
-    </main>
-  </div>
+  </main>
 
   <script src="/static/app.js"></script>
 </body>
