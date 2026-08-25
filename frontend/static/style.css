@@ -128,6 +128,22 @@ body {
 }
 .config-bar button:hover { border-color: var(--accent); color: var(--text-1); }
 
+/* Expulsar vive en la barra, no en el panel del disco: ese panel solo existe
+   cuando hay un disco puesto, y la bandeja hay que poder abrirla cuando no. */
+.eject-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0.3rem 0.8rem;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font: inherit; font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.eject-btn svg { width: 13px; height: 13px; }
+.eject-btn:hover { border-color: var(--accent); color: var(--text-1); }
+
 .badge {
   padding: 0.28rem 0.75rem;
   border-radius: var(--r-pill);
@@ -566,6 +582,8 @@ body.has-disc .settings { max-width: 1520px; }
   body { font-size: 14px; }
   .topbar { padding: 0.9rem 1.1rem; flex-wrap: wrap; gap: 0.6rem; }
   .brand-device { display: none; }
+  .eject-btn span { display: none; }
+  .eject-btn { padding: 0.3rem 0.55rem; }
   main { padding: 0.25rem 1.1rem 2rem; }
 
   .stage, body.has-disc .stage {

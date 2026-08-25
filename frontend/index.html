@@ -31,6 +31,10 @@
         <input id="ip-input" type="text" placeholder="192.168.1.x" aria-label="IP del equipo">
         <button id="btn-connect">Conectar</button>
       </div>
+      <button id="btn-cd-eject" class="eject-btn" title="Expulsar el disco / abrir la bandeja">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.5 4.5 14h15zM4.5 16.5h15v2.2h-15z"/></svg>
+        <span>Expulsar</span>
+      </button>
       <span id="conn-status" class="badge disconnected">Desconectado</span>
     </div>
   </header>
@@ -120,7 +124,6 @@
           </div>
           <div class="disc-actions">
             <button id="btn-cd-identify" class="btn-ghost hidden" title="Buscar el nombre de los temas">Identificar</button>
-            <button id="btn-cd-eject" class="btn-ghost" title="Expulsar el disco">Expulsar</button>
           </div>
         </div>
 

@@ -267,6 +267,13 @@ function refreshCover(s, onDisc) {
   }
 }
 
+// El WiiM devuelve como título la URL del WAV que le pasamos: .../api/cd/track/7.wav
+function trackFromUrl(title) {
+  if (typeof title !== 'string') return null;
+  const m = title.match(/\/api\/cd\/track\/(\d+)\.wav/);
+  return m ? parseInt(m[1]) : null;
+}
+
 // Input names as the device reports them, written the way the buttons read.
 const SOURCE_NAMES = {
   wifi: 'Wi-Fi', bluetooth: 'Bluetooth', 'line-in': 'Line-In', line_in: 'Line-In',
@@ -283,9 +290,12 @@ function updateUI(s) {
   // Track. For a disc, the device reports our stream URL as the title, which is
   // no use to anyone — name the track instead.
   const onDisc = typeof s.title === 'string' && s.title.includes(CD_URL_MARK);
-  const named = onDisc ? cdTracks.find(t => t.number === s.cd_track) : null;
+  // cd_track puede llegar vacío (el equipo pausado no siempre lo informa), y el
+  // número está igual en la URL del stream que él mismo reporta como título.
+  const num = s.cd_track ?? trackFromUrl(s.title);
+  const named = onDisc ? cdTracks.find(t => t.number === num) : null;
   const title = onDisc
-    ? (named?.title || `Tema ${s.cd_track ?? ''}`.trim())
+    ? (named?.title || (num ? `Tema ${num}` : cdAlbumTitle || 'Disco'))
     : s.title;
   $('track-title').textContent  = title || 'Nada sonando';
   $('track-artist').textContent = onDisc ? (cdAlbumArtist || 'CD') : (s.artist || '');
@@ -336,7 +346,7 @@ function updateUI(s) {
   }
 
   // CD track highlight — follows automatic advance, not just clicks
-  if (s.cd_track !== undefined && s.cd_track !== cdCurrent) markCdTrack(s.cd_track);
+  if (num !== null && num !== undefined && num !== cdCurrent) markCdTrack(num);
 
   // Disc swapped in the drive: reload the track list by itself
   if (s.cd_disc !== undefined && cdDisc !== null && s.cd_disc !== cdDisc) loadCd(true);
