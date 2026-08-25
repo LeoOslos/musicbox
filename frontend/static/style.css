@@ -669,6 +669,61 @@ body.has-disc .settings { max-width: 1520px; }
 .device-field-label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); }
 .device-field-value { font-family: var(--mono); font-size: 13px; color: var(--text-1); }
 
+/* ── Pantallas bajas y paneles abiertos ─────────────────────
+   En una pantalla achatada (portátil 16:9) abrir Fuente/Ecualizador/Dispositivo
+   empujaba la página y aparecía la barra de scroll. La escena cede el alto que
+   hace falta: es lo que sobra, no el panel. */
+body.panel-open .stage {
+  min-height: 0;
+  gap: 2rem;
+  align-items: start;
+}
+body.panel-open .cover-frame { max-width: min(100%, 38vh); }
+body.panel-open .settings { margin-top: 1.4rem; }
+
+@media (max-height: 820px) {
+  main { padding: 0.25rem 2rem 1.4rem; }
+  .stage { gap: 2.2rem; min-height: min(calc(100vh - 260px), 620px); }
+  .settings { margin-top: 1.5rem; }
+
+  /* Con el panel desplegado se recorta todo lo que es aire: la escena sigue
+     completa y entera, sin barra de scroll. */
+  body.panel-open { --cut-scale: 1; }
+  body.panel-open main { padding-bottom: 0.8rem; }
+  body.panel-open .cover-frame { max-width: min(100%, 32vh); }
+  body.panel-open .now-tags { margin-bottom: 0.55rem; }
+  body.panel-open .track-title { font-size: clamp(23px, 2.3vw, 32px); }
+  body.panel-open .track-artist { margin-top: 0.35rem; font-size: 16px; }
+  body.panel-open .progress-wrap { margin-top: 1rem; }
+  body.panel-open .transport { margin-top: 0.9rem; gap: 12px; }
+  body.panel-open .ctrl { width: 40px; height: 40px; }
+  body.panel-open .ctrl svg { width: 18px; height: 18px; }
+  body.panel-open .ctrl-play { width: 54px; height: 54px; }
+  body.panel-open .ctrl-play svg { width: 23px; height: 23px; }
+  body.panel-open .vol-row { margin-top: 0.9rem; }
+  body.panel-open .kbd-hint { display: none; }
+  body.panel-open .settings { margin-top: 1rem; }
+  body.panel-open .panel { padding: 0.8rem 1rem; }
+  body.panel-open .eq-bands { margin-top: 0.6rem; gap: 6px; }
+  body.panel-open .eq-band { gap: 5px; }
+  body.panel-open .eq-band-wrap { height: 56px; }
+  body.panel-open .eq-slider { width: 56px; }
+  /* Con un disco puesto, la lista de temas es lo mas alto de la pagina: cede
+     ella, que ya tiene su propio scroll. */
+  body.panel-open.has-disc .disc-col { max-height: calc(100vh - 330px); }
+}
+
+@media (max-height: 640px) {
+  body.panel-open .stage { gap: 1.6rem; }
+  body.panel-open .cover-frame { max-width: min(100%, 27vh); }
+  body.panel-open .track-title { font-size: clamp(21px, 2vw, 27px); }
+  body.panel-open .eq-band-wrap { height: 38px; }
+  body.panel-open .eq-slider { width: 38px; }
+  body.panel-open .panel { padding: 0.65rem 0.9rem; }
+  body.panel-open .eq-bands { margin-top: 0.45rem; }
+  body.panel-open .vol-row, body.panel-open .transport { margin-top: 0.7rem; }
+}
+
 /* ── Pantallas medianas ─────────────────────────────────── */
 @media (max-width: 1250px) {
   body.has-disc .stage {

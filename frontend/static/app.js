@@ -613,6 +613,9 @@ document.querySelectorAll('.tab').forEach(tab => {
       tab.classList.add('active');
       $(`panel-${target}`).classList.remove('hidden');
     }
+    // Con un panel abierto la pantalla tiene que dar para todo: el CSS achica
+    // la escena en vez de dejar que aparezca la barra de scroll.
+    document.body.classList.toggle('panel-open', !wasOpen);
   });
 });
 
