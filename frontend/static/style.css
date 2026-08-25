@@ -8,28 +8,80 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
+  /* ── Tema pop (por defecto) ──────────────────────────────
+     Claro y saturado: el color de la tapa no solo tiñe un acento, pinta el
+     fondo entero en dos manchas grandes. Los paneles son vidrio blanco encima
+     de eso, así que el color se ve a través de todo sin comerse el texto. */
+  --bg:          #FBF3E9;
+  --bg-2:        #F3E7D8;
+  --panel:       rgba(255, 255, 255, 0.84);
+  --panel-solid: #FFFFFF;
+  --raise:       rgba(255, 255, 255, 0.72);
+  --raise-hover: rgba(255, 255, 255, 0.92);
+  --line:        rgba(40, 26, 12, 0.13);
+  --line-strong: rgba(40, 26, 12, 0.28);
+  --text-1:      #1E1712;
+  --text-2:      #574A3E;
+  --text-3:      #8A7A6A;
+  --on-accent:   #FFFFFF;
+  --green:       #1E7A45;
+  --green-bg:    rgba(46, 160, 90, 0.16);
+  --red:         #B03A3A;
+  --red-bg:      rgba(190, 70, 70, 0.13);
+  --track-empty: rgba(40, 26, 12, 0.14);
+  --ambient-opacity: 0.05;
+  --cut-opacity: 1;
+  --cut-orange: #E3701A;
+  --cut-verm:   #D8402A;
+  --cut-ink:    #17140F;
+  --cut-bottle: #1B4A3A;
+  --cut-blush:  #E8A78E;
+  --cut-sky:    #A7C6DB;
+  --cut-brick:  #B93A22;
+  --shadow-cover: 0 26px 60px rgba(60, 35, 10, 0.22), 0 3px 10px rgba(60, 35, 10, 0.12);
+  --shadow-panel: 0 14px 40px rgba(60, 35, 10, 0.14);
+  /* En claro, un acento sacado de la tapa suele venir demasiado luminoso para
+     leerse; el JS entrega la versión ya oscurecida en --art-accent. */
+  --accent:      var(--art-accent, #E0761B);
+
+  --r-lg:        20px;
+  --r-md:        13px;
+  --r-pill:      999px;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* ── Tema oscuro ──────────────────────────────────────────
+   El diseño original: casi negro, la tapa como única fuente de luz. */
+:root[data-theme="dark"] {
   --bg:          #0B0A09;
   --bg-2:        #131110;
-  /* Las superficies son translúcidas: dejan pasar el color de la tapa
-     que vive en el fondo, que es lo que hace que la página cambie de
-     clima con cada disco sin repintar nada. */
   --panel:       rgba(28, 25, 22, 0.62);
   --panel-solid: #1A1714;
+  --raise:       rgba(255, 255, 255, 0.04);
+  --raise-hover: rgba(255, 255, 255, 0.09);
   --line:        rgba(255, 246, 232, 0.10);
   --line-strong: rgba(255, 246, 232, 0.20);
   --text-1:      #F6F1E9;
   --text-2:      #B8AC9E;
   --text-3:      #8A7E72;
-  --accent:      var(--art-accent, #E39B3A);
+  --on-accent:   #14100B;
   --green:       #6FBF8B;
   --green-bg:    rgba(60, 120, 80, 0.20);
   --red:         #D08484;
   --red-bg:      rgba(120, 60, 60, 0.20);
-  --r-lg:        20px;
-  --r-md:        13px;
-  --r-pill:      999px;
-  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --track-empty: rgba(255, 255, 255, 0.13);
+  --ambient-opacity: 0.30;
+  --cut-opacity: 0.78;
+  --cut-orange: #C25C12;
+  --cut-verm:   #B4331F;
+  --cut-ink:    #0E0C09;
+  --cut-bottle: #1A322C;
+  --cut-blush:  #B87E68;
+  --cut-sky:    #6E8EA6;
+  --cut-brick:  #942C18;
   --shadow-cover: 0 30px 70px rgba(0, 0, 0, 0.62), 0 4px 14px rgba(0, 0, 0, 0.5);
+  --shadow-panel: none;
+  --accent:      var(--art-accent, #E39B3A);
 }
 
 body {
@@ -51,6 +103,9 @@ body {
    garantiza que el texto se lea con cualquier carátula. */
 .ambient { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
 
+/* El cambio de tema es un corte seco si los tokens no transicionan */
+body, .card, .panel, .disc-col { transition: background-color 0.35s ease, color 0.35s ease; }
+
 .ambient-art {
   position: absolute; inset: -12%;
   width: 124%; height: 124%;
@@ -61,13 +116,44 @@ body {
   transition: opacity 1s ease;
   will-change: opacity;
 }
-.ambient-art.visible { opacity: 0.42; }
+.ambient-art.visible { opacity: var(--ambient-opacity); }
 
+/* ── Recortes (papiers découpés) ──────────────────────────
+   El fondo es la gama del póster de Matisse: papel crema y siete recortes de
+   color plano que siguen más allá del borde. Sin degradé y sin blur — el corte
+   nítido es lo que los hace leer como papel y no como una luz difusa.
+   Los recortes NO dependen de la tapa: el color del disco sigue mandando en
+   los controles (--accent), el fondo es siempre la misma gama. */
+.cutouts {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  opacity: var(--cut-opacity);
+  transition: opacity 0.35s ease;
+}
+.cut { transition: fill 0.35s ease; }
+.cut-orange { fill: var(--cut-orange); }
+.cut-verm   { fill: var(--cut-verm); }
+.cut-ink    { fill: var(--cut-ink); }
+.cut-bottle { fill: var(--cut-bottle); }
+.cut-blush  { fill: var(--cut-blush); }
+.cut-sky    { fill: var(--cut-sky); }
+.cut-brick  { fill: var(--cut-brick); }
+
+/* El velo: papel crema al frente, suficiente para que el texto grande apoye
+   sobre los recortes sin pelearse con ellos. */
 .ambient-scrim {
   position: absolute; inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg) 12%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 20%, transparent) 55%,
+    color-mix(in srgb, var(--bg) 34%, transparent) 100%);
+}
+
+:root[data-theme="dark"] .ambient-scrim {
   background:
-    radial-gradient(1100px 700px at 28% 22%, rgba(0,0,0,0.10), rgba(0,0,0,0.72) 72%),
-    linear-gradient(180deg, rgba(11,10,9,0.80) 0%, rgba(11,10,9,0.55) 40%, rgba(11,10,9,0.92) 100%);
+    radial-gradient(1100px 700px at 28% 22%, rgba(0,0,0,0.06), rgba(0,0,0,0.52) 76%),
+    linear-gradient(180deg, rgba(11,10,9,0.58) 0%, rgba(11,10,9,0.34) 40%, rgba(11,10,9,0.76) 100%);
 }
 
 /* ── Topbar ─────────────────────────────────────────────── */
@@ -101,7 +187,7 @@ body {
 .config-bar input {
   width: 132px;
   padding: 0.34rem 0.7rem;
-  background: rgba(255,255,255,0.04);
+  background: var(--raise);
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
   color: var(--text-2);
@@ -142,6 +228,19 @@ body {
   transition: border-color 0.15s, color 0.15s;
 }
 .eject-btn svg { width: 13px; height: 13px; }
+
+.theme-btn {
+  display: grid; place-items: center;
+  width: 31px; height: 31px;
+  background: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.theme-btn svg { width: 15px; height: 15px; }
+.theme-btn:hover { border-color: var(--accent); color: var(--text-1); background: var(--raise-hover); }
 .eject-btn:hover { border-color: var(--accent); color: var(--text-1); }
 
 .badge {
@@ -192,14 +291,14 @@ body.has-disc .disc-col { display: flex; }
   width: 100%; aspect-ratio: 1;
   border-radius: var(--r-lg);
   overflow: hidden;
-  background: linear-gradient(150deg, rgba(255,255,255,0.05), rgba(0,0,0,0.35));
+  background: linear-gradient(150deg, var(--raise), color-mix(in srgb, var(--accent) 22%, transparent));
   box-shadow: var(--shadow-cover);
   border: 1px solid var(--line);
 }
 .cover-frame::after {
   content: ''; position: absolute; inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
   pointer-events: none;
 }
 .cover { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -225,7 +324,7 @@ body.has-disc .disc-col { display: flex; }
   font-size: 11px; font-weight: 600;
   letter-spacing: 0.10em; text-transform: uppercase;
   color: var(--text-2);
-  background: rgba(255,255,255,0.03);
+  background: var(--raise);
 }
 .tag-status::before {
   content: ''; width: 6px; height: 6px; border-radius: 50%;
@@ -252,7 +351,7 @@ body.has-disc .disc-col { display: flex; }
 .progress-bar {
   position: relative;
   height: 6px;
-  background: rgba(255,255,255,0.11);
+  background: var(--track-empty);
   border-radius: var(--r-pill);
   cursor: pointer;
   outline: none;
@@ -271,9 +370,9 @@ body.has-disc .disc-col { display: flex; }
   position: absolute; right: -6px; top: 50%;
   width: 12px; height: 12px;
   transform: translateY(-50%) scale(0);
-  background: var(--text-1);
+  background: var(--accent);
   border-radius: 50%;
-  box-shadow: 0 0 0 4px rgba(0,0,0,0.35);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bg) 70%, transparent);
   transition: transform 0.18s ease;
 }
 .progress-bar:hover .progress-knob,
@@ -295,24 +394,24 @@ body.has-disc .disc-col { display: flex; }
   width: 46px; height: 46px;
   border-radius: 50%;
   border: 1px solid var(--line);
-  background: rgba(255,255,255,0.04);
+  background: var(--raise);
   color: var(--text-2);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.12s;
 }
 .ctrl svg { width: 21px; height: 21px; }
-.ctrl:hover { color: var(--text-1); border-color: var(--line-strong); background: rgba(255,255,255,0.09); }
+.ctrl:hover { color: var(--text-1); border-color: var(--line-strong); background: var(--raise-hover); }
 .ctrl:active { transform: scale(0.94); }
 
 .ctrl-play {
   width: 68px; height: 68px;
   background: var(--accent);
   border-color: transparent;
-  color: #14100B;
-  box-shadow: 0 8px 28px color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--on-accent);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--accent) 38%, transparent);
 }
 .ctrl-play svg { width: 28px; height: 28px; }
-.ctrl-play:hover { background: var(--accent); color: #14100B; filter: brightness(1.08); border-color: transparent; }
+.ctrl-play:hover { background: var(--accent); color: var(--on-accent); filter: brightness(1.08); border-color: transparent; }
 
 /* ── Volumen ────────────────────────────────────────────── */
 .vol-row { display: flex; align-items: center; gap: 14px; margin-top: 1.6rem; max-width: 420px; }
@@ -334,21 +433,21 @@ body.has-disc .disc-col { display: flex; }
 input[type="range"] {
   -webkit-appearance: none; appearance: none;
   flex: 1; height: 4px;
-  background: rgba(255,255,255,0.13);
+  background: var(--track-empty);
   border-radius: var(--r-pill);
   outline: none; cursor: pointer;
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 15px; height: 15px; border-radius: 50%;
-  background: var(--text-1);
-  box-shadow: 0 1px 6px rgba(0,0,0,0.6);
+  background: var(--accent);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.35);
   transition: transform 0.12s;
 }
 input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 input[type="range"]::-moz-range-thumb {
   width: 15px; height: 15px; border: none; border-radius: 50%;
-  background: var(--text-1);
+  background: var(--accent);
 }
 .vol-label { width: 30px; text-align: right; font-size: 13px; color: var(--text-2); }
 
@@ -364,6 +463,7 @@ input[type="range"]::-moz-range-thumb {
 .disc-col {
   flex-direction: column;
   align-self: center;
+  box-shadow: var(--shadow-panel);
   background: var(--panel);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -407,7 +507,7 @@ input[type="range"]::-moz-range-thumb {
   background: var(--accent);
   border: 1px solid transparent;
   border-radius: var(--r-pill);
-  color: #14100B;
+  color: var(--on-accent);
   font: inherit; font-size: 12px; font-weight: 600;
   cursor: pointer;
 }
@@ -420,10 +520,10 @@ input[type="range"]::-moz-range-thumb {
   min-height: 0;
   display: flex; flex-direction: column; gap: 2px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.16) transparent;
+  scrollbar-color: var(--line-strong) transparent;
 }
 .cd-tracks::-webkit-scrollbar { width: 6px; }
-.cd-tracks::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 3px; }
+.cd-tracks::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
 
 .cd-track {
   display: grid;
@@ -438,7 +538,7 @@ input[type="range"]::-moz-range-thumb {
   text-align: left; cursor: pointer;
   transition: background 0.13s, color 0.13s;
 }
-.cd-track:hover { background: rgba(255,255,255,0.06); color: var(--text-1); }
+.cd-track:hover { background: var(--raise-hover); color: var(--text-1); }
 .cd-track.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text-1); }
 .cd-track.active .cd-track-num { color: var(--accent); }
 
@@ -459,7 +559,7 @@ input[type="range"]::-moz-range-thumb {
 .cd-search-row input {
   flex: 1; min-width: 0;
   padding: 0.36rem 0.7rem;
-  background: rgba(255,255,255,0.05);
+  background: var(--raise);
   border: 1px solid var(--line); border-radius: var(--r-pill);
   color: var(--text-1); font: inherit; font-size: 12.5px; outline: none;
 }
@@ -469,13 +569,13 @@ input[type="range"]::-moz-range-thumb {
 .cd-candidate {
   display: flex; flex-direction: column; gap: 1px;
   width: 100%; padding: 0.5rem 0.6rem;
-  background: rgba(255,255,255,0.04);
+  background: var(--raise);
   border: 1px solid var(--line); border-radius: 10px;
   color: var(--text-3); font: inherit; font-size: 11.5px;
   text-align: left; cursor: pointer;
   transition: border-color 0.13s, background 0.13s;
 }
-.cd-candidate:hover { border-color: var(--accent); background: rgba(255,255,255,0.07); }
+.cd-candidate:hover { border-color: var(--accent); background: var(--raise-hover); }
 .cd-candidate-album { font-size: 13px; font-weight: 600; color: var(--text-1); }
 .cd-candidate-first { color: var(--text-2); font-style: italic; }
 .cd-candidate-warn { color: var(--red); }
@@ -489,7 +589,8 @@ body.has-disc .settings { max-width: 1520px; }
 .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
 .tab {
   padding: 0.4rem 0.95rem;
-  background: transparent;
+  background: var(--raise);
+  backdrop-filter: blur(6px);
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
   color: var(--text-3);
@@ -506,6 +607,7 @@ body.has-disc .settings { max-width: 1520px; }
 
 .panel {
   margin-top: 12px;
+  box-shadow: var(--shadow-panel);
   padding: 1.15rem 1.25rem;
   background: var(--panel);
   backdrop-filter: blur(18px);
@@ -517,7 +619,7 @@ body.has-disc .settings { max-width: 1520px; }
 .source-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .source-btn {
   padding: 0.45rem 1rem;
-  background: rgba(255,255,255,0.04);
+  background: var(--raise);
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
   color: var(--text-2);

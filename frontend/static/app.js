@@ -11,7 +11,39 @@ let state = {};
 // This only works because /api/artwork is proxied by our own backend: an image
 // served straight from the WiiM would taint the canvas and readPixels would throw.
 
-const ART_FALLBACK = '#E39B3A';
+const ART_FALLBACK = { light: '#E0761B', dark: '#E39B3A' };
+
+// --- Tema ---
+//
+// Pop es el default. La elección se guarda: quien prefiere oscuro no quiere
+// volver a pedirlo cada vez que abre la página.
+
+const THEME_KEY = 'wiim-theme';
+let theme = 'light';
+
+function readStoredTheme() {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    return saved === 'dark' || saved === 'light' ? saved : null;
+  } catch { return null; }
+}
+
+function applyTheme(next, remember = true) {
+  theme = next;
+  document.documentElement.setAttribute('data-theme', next);
+  document.getElementById('icon-moon')?.classList.toggle('hidden', next === 'dark');
+  document.getElementById('icon-sun')?.classList.toggle('hidden', next !== 'dark');
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', next === 'dark' ? '#0B0A09' : '#FBF3E9');
+  if (remember) { try { localStorage.setItem(THEME_KEY, next); } catch {} }
+  // El acento y la tapa dibujada del CD se calculan distinto en cada tema
+  setAccent(rawAccent);
+  lastArtworkKey = null;
+  if (state && Object.keys(state).length) {
+    refreshCover(state, typeof state.title === 'string' && state.title.includes(CD_URL_MARK));
+  }
+}
+
 
 // The device reports our own stream URL as the title — that is how a disc is
 // told apart from Spotify or anything else playing.
@@ -46,11 +78,12 @@ function coverAccent(img) {
     if (!best || bucket.n > best.n) best = bucket;
   }
   if (!best) return null;
-  return lift(best.r / best.n, best.g / best.n, best.b / best.n);
+  return [best.r / best.n, best.g / best.n, best.b / best.n];
 }
 
-// A dark cover would hand us a dark accent, which then disappears against the
-// page. Accents are pushed into a band that stays legible on near-black.
+// Una tapa oscura entrega un acento oscuro, que después desaparece contra la
+// página — y en el tema claro pasa lo simétrico con las tapas luminosas. Cada
+// tema empuja el color a la banda donde se lee, sin perder el tono.
 function lift(r, g, b) {
   const max = Math.max(r, g, b) || 1;
   const scale = Math.min(235 / max, 2.2);
@@ -58,8 +91,51 @@ function lift(r, g, b) {
   return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
 }
 
-function setAccent(colour) {
-  document.documentElement.style.setProperty('--art-accent', colour || ART_FALLBACK);
+// Para el tema claro: mismo tono, saturado, con la luminosidad bajada a donde
+// contrasta contra crema (y sirve de fondo del botón de play con texto blanco).
+function deepen(r, g, b) {
+  const [h, s] = rgbToHs(r, g, b);
+  return `hsl(${h}, ${Math.min(92, Math.max(55, s))}%, 42%)`;
+}
+
+function rgbToHs(r, g, b) {
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === rn) h = ((gn - bn) / d) % 6;
+    else if (max === gn) h = (bn - rn) / d + 2;
+    else h = (rn - gn) / d + 4;
+  }
+  h = Math.round(h * 60);
+  if (h < 0) h += 360;
+  const l = (max + min) / 2;
+  const s = d ? Math.round((d / (1 - Math.abs(2 * l - 1))) * 100) : 0;
+  return [h, s];
+}
+
+// El color crudo de la tapa, para poder recalcularlo al cambiar de tema.
+let rawAccent = null;
+
+function setAccent(rgb) {
+  rawAccent = rgb || null;
+  const root = document.documentElement;
+  if (!rgb) {
+    root.style.setProperty('--art-accent', ART_FALLBACK[theme]);
+    root.style.removeProperty('--art-accent-2');
+    return;
+  }
+  const [r, g, b] = rgb;
+  root.style.setProperty('--art-accent', theme === 'dark' ? lift(r, g, b) : deepen(r, g, b));
+  // El segundo color, para la mancha opuesta del fondo pop: el tono girado, no
+  // el complementario exacto, que con muchas tapas da un choque feo.
+  const [h, s] = rgbToHs(r, g, b);
+  const sat = Math.min(90, Math.max(62, s));
+  root.style.setProperty('--art-accent-2', `hsl(${(h + 155) % 360}, ${sat}%, ${theme === 'dark' ? 55 : 60}%)`);
+  // Un tercer tono, más cerca del original, para que el fondo pop tenga
+  // profundidad en vez de dos manchas planas.
+  root.style.setProperty('--art-accent-3', `hsl(${(h + 45) % 360}, ${sat}%, ${theme === 'dark' ? 52 : 64}%)`);
 }
 
 // --- The cover a CD does not have ---
@@ -72,10 +148,39 @@ function setAccent(colour) {
 let coverHue = 210;
 
 // Same album, same colour, every time — derived from the name, not random.
-function albumHue(name) {
+// La tapa dibujada no tiene de dónde sacar un color: el tono del álbum es el
+// acento, así que se convierte al mismo formato crudo que el resto.
+function hueToRgb(hue) {
+  const f = (n) => {
+    const k = (n + hue / 30) % 12;
+    const a = 0.62 * Math.min(0.5, 1 - 0.5);
+    return Math.round(255 * (0.5 - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)))));
+  };
+  return [f(0), f(8), f(4)];
+}
+
+// Los papeles del póster de Matisse: naranja, bermellón, teja, salmón, hoja y
+// celeste. La tapa dibujada elige uno de esos y no un tono cualquiera del
+// círculo, así el CD no choca contra el papel recortado del fondo. Ninguno baja
+// del 50% de luz: el título va en tinta oscura encima.
+const MATISSE_PAPERS = [
+  { h: 26,  s: 82, l: 56 },
+  { h: 8,   s: 70, l: 55 },
+  { h: 14,  s: 66, l: 51 },
+  { h: 20,  s: 58, l: 70 },
+  { h: 158, s: 34, l: 52 },
+  { h: 204, s: 40, l: 66 },
+];
+
+// El mismo álbum, el mismo papel, siempre.
+function albumPaper(name) {
   let hash = 0;
   for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) % 3600;
-  return hash / 10;
+  return MATISSE_PAPERS[hash % MATISSE_PAPERS.length];
+}
+
+function albumHue(name) {
+  return albumPaper(name).h;
 }
 
 function discCover(album, artist, tracks, current) {
@@ -85,9 +190,16 @@ function discCover(album, artist, tracks, current) {
   const ctx = canvas.getContext('2d');
   const hue = coverHue;
 
+  const pop = theme !== 'dark';
   const bg = ctx.createRadialGradient(S * 0.5, S * 0.42, S * 0.05, S * 0.5, S * 0.5, S * 0.75);
-  bg.addColorStop(0, `hsl(${hue}, 34%, 22%)`);
-  bg.addColorStop(1, `hsl(${(hue + 28) % 360}, 40%, 8%)`);
+  if (pop) {
+    const paper = albumPaper(album || artist || 'CD');
+    bg.addColorStop(0, `hsl(${paper.h}, ${paper.s}%, ${paper.l}%)`);
+    bg.addColorStop(1, `hsl(${(paper.h + 14) % 360}, ${paper.s}%, ${paper.l - 13}%)`);
+  } else {
+    bg.addColorStop(0, `hsl(${hue}, 34%, 22%)`);
+    bg.addColorStop(1, `hsl(${(hue + 28) % 360}, 40%, 8%)`);
+  }
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, S, S);
 
@@ -101,7 +213,9 @@ function discCover(album, artist, tracks, current) {
     const playing = t.number === current;
     ctx.beginPath();
     ctx.arc(S / 2, S / 2, radius, angle + gap / 2, angle + sweep - gap / 2);
-    ctx.strokeStyle = playing ? `hsl(${hue}, 85%, 68%)` : `hsla(${hue}, 45%, 78%, 0.26)`;
+    ctx.strokeStyle = playing
+      ? (pop ? 'rgba(255, 255, 255, 0.98)' : `hsl(${hue}, 85%, 68%)`)
+      : (pop ? 'rgba(255, 255, 255, 0.34)' : `hsla(${hue}, 45%, 78%, 0.26)`);
     ctx.lineWidth = playing ? 15 : 6;
     ctx.stroke();
     angle += sweep;
@@ -110,13 +224,13 @@ function discCover(album, artist, tracks, current) {
   // No centre hole: it collided with the title, and the ring already reads as
   // a disc without it.
   ctx.textAlign = 'center';
-  ctx.fillStyle = `hsla(${hue}, 30%, 92%, 0.62)`;
+  ctx.fillStyle = pop ? 'rgba(28, 16, 6, 0.62)' : `hsla(${hue}, 30%, 92%, 0.62)`;
   ctx.font = '500 20px Inter, system-ui, sans-serif';
   ctx.letterSpacing = '2px';
   ctx.fillText((artist || '').toUpperCase(), S / 2, S * 0.4, S * 0.56);
   ctx.letterSpacing = '0px';
 
-  ctx.fillStyle = 'rgba(250, 246, 240, 0.96)';
+  ctx.fillStyle = pop ? 'rgba(24, 14, 5, 0.94)' : 'rgba(250, 246, 240, 0.96)';
   const lines = wrapText(ctx, album || 'Disco sin nombre', S * 0.5, 44);
   lines.forEach((line, i) => {
     ctx.font = '500 44px Inter, system-ui, sans-serif';
@@ -255,8 +369,7 @@ function refreshCover(s, onDisc) {
 
   if (onDisc && cdTracks.length) {
     coverHue = albumHue(cdAlbumTitle || cdAlbumArtist || 'CD');
-    show(discCover(cdAlbumTitle, cdAlbumArtist, cdTracks, s.cd_track),
-         `hsl(${coverHue}, 78%, 62%)`);
+    show(discCover(cdAlbumTitle, cdAlbumArtist, cdTracks, s.cd_track), hueToRgb(coverHue));
   } else if (s.has_artwork) {
     show(`/api/artwork?t=${Date.now()}`);
   } else {
@@ -482,6 +595,8 @@ $('btn-mute').addEventListener('click', () => {
 document.querySelectorAll('.source-btn').forEach(btn => {
   btn.addEventListener('click', () => post(`/api/source/${btn.dataset.source}`));
 });
+
+$('btn-theme').addEventListener('click', () => applyTheme(theme === 'dark' ? 'light' : 'dark'));
 
 // --- Settings tabs ---
 //
@@ -803,3 +918,7 @@ $('btn-eq-flat').addEventListener('click', async () => {
 
 // Build sliders on page load (before WS connects)
 buildEqBands();
+
+// El tema ya lo fijó el script del <head> para que no haya un fogonazo blanco
+// antes de pintar; acá solo se sincronizan los iconos y el acento.
+applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light', false);
