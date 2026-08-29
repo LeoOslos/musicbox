@@ -343,6 +343,7 @@ function connectWS() {
 // --- UI update ---
 
 let lastArtworkKey = null;
+let coverFadeTimer = null;
 
 // Both covers land here: the drawn one for a disc, the device's own for anything
 // else. Reloaded only when the key changes, so this runs once per track, never
@@ -355,10 +356,35 @@ function refreshCover(s, onDisc) {
   if (key === lastArtworkKey) return;
   lastArtworkKey = key;
 
+  // La tapa es el elemento mas grande de la pagina: cambiarla de golpe se ve
+  // como un corte. La saliente queda congelada abajo y la entrante se funde
+  // encima, pero recien cuando ya decodifico — antes se asignaba el src a ciegas
+  // y el marco parpadeaba vacio mientras bajaba la imagen.
   const show = (src, accent) => {
-    art.src = src;
-    art.classList.remove('hidden');
-    empty.classList.add('hidden');
+    const prev = $('artwork-prev');
+    const hadCover = !art.classList.contains('hidden') && art.getAttribute('src');
+    if (hadCover) {
+      prev.src = art.src;
+      prev.classList.remove('hidden');
+    }
+    art.classList.add('is-loading');
+
+    const paint = () => {
+      art.src = src;
+      art.classList.remove('hidden');
+      empty.classList.add('hidden');
+      // Dos frames: uno para que el navegador registre opacity 0 con el src
+      // nuevo, otro para que la vuelta a 1 sea una transicion y no un salto.
+      requestAnimationFrame(() => requestAnimationFrame(() => art.classList.remove('is-loading')));
+      if (coverFadeTimer) clearTimeout(coverFadeTimer);
+      coverFadeTimer = setTimeout(() => prev.classList.add('hidden'), 340);
+    };
+
+    const pre = new Image();
+    pre.onload = paint;
+    pre.onerror = paint;
+    pre.src = src;
+
     bgArt.classList.remove('visible');
     bgArt.src = src;
     bgArt.onload = () => {
@@ -374,6 +400,8 @@ function refreshCover(s, onDisc) {
     show(`/api/artwork?t=${Date.now()}`);
   } else {
     art.classList.add('hidden');
+    art.classList.remove('is-loading');
+    $('artwork-prev').classList.add('hidden');
     empty.classList.remove('hidden');
     bgArt.classList.remove('visible');
     setAccent(null);
@@ -393,6 +421,34 @@ const SOURCE_NAMES = {
   optical: 'Óptica', hdmi: 'HDMI', udisk: 'USB',
 };
 
+// El estado llega una vez por segundo; el texto casi nunca cambia. Solo cuando
+// cambia de verdad vale un fundido — salida corta, entrada mas tranquila — y la
+// primera pintada entra sin animacion, que no hay nada de donde venir.
+let lastTrackKey = null;
+let trackSwapTimer = null;
+
+function setTrackText(title, artist, album) {
+  const key = `${title}|${artist}|${album}`;
+  if (key === lastTrackKey) return;
+  const first = lastTrackKey === null;
+  lastTrackKey = key;
+
+  const write = () => {
+    $('track-title').textContent  = title;
+    $('track-artist').textContent = artist;
+    $('track-album').textContent  = album;
+  };
+  if (first) { write(); return; }
+
+  const col = document.querySelector('.now-col');
+  col.classList.add('is-swapping');
+  if (trackSwapTimer) clearTimeout(trackSwapTimer);
+  trackSwapTimer = setTimeout(() => {
+    write();
+    col.classList.remove('is-swapping');
+  }, 140);
+}
+
 function updateUI(s) {
   // Status tag with animated dot
   const statusMap = { play: 'Reproduciendo', pause: 'Pausado', stop: 'Detenido', load: 'Cargando' };
@@ -410,9 +466,10 @@ function updateUI(s) {
   const title = onDisc
     ? (named?.title || (num ? `Tema ${num}` : cdAlbumTitle || 'Disco'))
     : s.title;
-  $('track-title').textContent  = title || 'Nada sonando';
-  $('track-artist').textContent = onDisc ? (cdAlbumArtist || 'CD') : (s.artist || '');
-  $('track-album').textContent  = onDisc ? (cdAlbumTitle || '') : (s.album || '');
+  setTrackText(
+    title || 'Nada sonando',
+    onDisc ? (cdAlbumArtist || 'CD') : (s.artist || ''),
+    onDisc ? (cdAlbumTitle || '') : (s.album || ''));
   $('cd-tag').classList.toggle('hidden', !onDisc);
 
   // Source, shown next to the status instead of only inside the settings panel
@@ -494,7 +551,11 @@ function fmtTime(sec) {
 function updateProgress(pos, dur) {
   $('pos-label').textContent = fmtTime(pos);
   $('dur-label').textContent = fmtTime(dur);
-  $('progress-fill').style.width = dur > 0 ? `${Math.min(100, (pos / dur) * 100)}%` : '0%';
+  // scaleX del relleno + translateX del riel del knob, los dos con la misma
+  // transicion lineal de 0.9s: van sincronizados y no tocan el layout.
+  const p = dur > 0 ? Math.min(1, Math.max(0, pos / dur)) : 0;
+  $('progress-fill').style.transform = `scaleX(${p})`;
+  $('progress-knob-rail').style.transform = `translateX(${(p * 100).toFixed(3)}%)`;
 }
 
 let localPos = 0;

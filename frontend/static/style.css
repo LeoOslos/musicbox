@@ -44,6 +44,10 @@
      leerse; el JS entrega la versión ya oscurecida en --art-accent. */
   --accent:      var(--art-accent, #E0761B);
 
+  /* Curva unica para todo el movimiento deliberado: arranca rapido, frena
+     largo. Las incorporadas (ease/ease-out) son demasiado debiles. */
+  --ease-out:    cubic-bezier(0.23, 1, 0.32, 1);
+
   --r-lg:        20px;
   --r-md:        13px;
   --r-pill:      999px;
@@ -301,7 +305,14 @@ body.has-disc .disc-col { display: flex; }
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
   pointer-events: none;
 }
-.cover { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+/* La entrante manda; la saliente espera abajo hasta que la nueva decodifico. */
+#artwork      { z-index: 1; opacity: 1; transition: opacity 300ms var(--ease-out); }
+#artwork.is-loading { opacity: 0; }
+.cover-prev   { z-index: 0; }
 
 .cover-empty {
   position: absolute; inset: 0;
@@ -335,6 +346,19 @@ body.has-disc .disc-col { display: flex; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.28; } }
 .tag-cd { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 
+/* Al cambiar de tema las tres lineas saltaban de golpe. Salen rapido y
+   entran con calma: el ojo alcanza a registrar que cambio la cancion. */
+.track-title, .track-artist, .track-album {
+  transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
+}
+.now-col.is-swapping .track-title,
+.now-col.is-swapping .track-artist,
+.now-col.is-swapping .track-album {
+  opacity: 0;
+  transform: translateY(-0.18em);
+  transition-duration: 140ms;
+}
+
 .track-title {
   font-size: clamp(30px, 3.1vw, 46px);
   font-weight: 700;
@@ -359,24 +383,39 @@ body.has-disc .disc-col { display: flex; }
 .progress-bar::before {
   content: ''; position: absolute; inset: -12px 0;  /* área de click cómoda */
 }
+/* Movimiento constante -> linear. Y transform, no width: la barra avanza
+   todo el tiempo que suena algo, y width recalcula layout en cada frame. */
 .progress-fill {
-  position: relative;
-  height: 100%;
+  position: absolute; inset: 0;
   background: var(--accent);
   border-radius: var(--r-pill);
-  transition: width 0.9s linear;
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 0.9s linear;
+}
+/* El riel mide lo mismo que la barra, asi translateX(p * 100%) de si mismo
+   equivale a p * ancho de la barra. El knob viaja sin heredar el scaleX. */
+.progress-knob-rail {
+  position: absolute; inset: 0;
+  transform: translateX(0);
+  transition: transform 0.9s linear;
+  pointer-events: none;
 }
 .progress-knob {
-  position: absolute; right: -6px; top: 50%;
+  position: absolute; left: -6px; top: 50%;
   width: 12px; height: 12px;
-  transform: translateY(-50%) scale(0);
   background: var(--accent);
   border-radius: 50%;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--bg) 70%, transparent);
-  transition: transform 0.18s ease;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.9);
+  transition: transform 160ms var(--ease-out), opacity 160ms var(--ease-out);
 }
-.progress-bar:hover .progress-knob,
-.progress-bar:focus-visible .progress-knob { transform: translateY(-50%) scale(1); }
+/* El hover se aisla: en tactil un tap dispara un hover falso que queda pegado. */
+@media (hover: hover) and (pointer: fine) {
+  .progress-bar:hover .progress-knob { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+.progress-bar:focus-visible .progress-knob { opacity: 1; transform: translateY(-50%) scale(1); }
 
 /* El bug que arreglamos: en una columna angosta los tres tiempos se
    pisaban («0:00PAUSADO0:00»). Ahora son dos, a los extremos. */
@@ -762,6 +801,18 @@ body.panel-open .settings { margin-top: 1.4rem; }
   .eq-bands { grid-template-columns: repeat(5, 1fr); gap: 14px 4px; }
 }
 
+/* Menos movimiento y mas suave, no cero: se conservan los fundidos de opacidad
+   y color (son los que explican que algo cambio) y se van los desplazamientos,
+   el latido del punto y el deslizamiento continuo de la barra. */
 @media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; transition-duration: 0.01ms !important; }
+  .tag-status.is-playing::before { animation: none; }
+  .progress-fill, .progress-knob-rail { transition: none; }
+  .stage { transition: none; }
+  .ambient-art { transition: opacity 200ms var(--ease-out); }
+  .ctrl:active { transform: none; }
+  .progress-knob { transform: translateY(-50%) scale(1); transition: opacity 160ms var(--ease-out); }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: none; }
+  .now-col.is-swapping .track-title,
+  .now-col.is-swapping .track-artist,
+  .now-col.is-swapping .track-album { transform: none; }
 }

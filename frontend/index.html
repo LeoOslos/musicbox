@@ -74,6 +74,9 @@
 
       <div class="cover-col">
         <div class="cover-frame">
+          <!-- Dos capas: la saliente se congela abajo mientras la entrante decodifica,
+               asi el marco nunca parpadea vacio y el cambio de tema es un fundido. -->
+          <img id="artwork-prev" class="cover cover-prev hidden" src="" alt="" aria-hidden="true">
           <img id="artwork" src="" alt="" class="cover hidden">
           <div id="cover-empty" class="cover-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
@@ -98,9 +101,10 @@
         <div class="progress-wrap">
           <div class="progress-bar" id="progress-bar-click" role="slider" tabindex="0"
                aria-label="Posición del tema">
-            <div id="progress-fill" class="progress-fill" style="width:0%">
-              <span class="progress-knob"></span>
-            </div>
+            <div id="progress-fill" class="progress-fill"></div>
+            <!-- El knob va en un riel del ancho de la barra: translateX(p * 100%)
+                 de si mismo = p * ancho de la barra, sin que lo aplaste el scaleX. -->
+            <div id="progress-knob-rail" class="progress-knob-rail"><span class="progress-knob"></span></div>
           </div>
           <div class="progress-times">
             <span id="pos-label" class="mono">0:00</span>
