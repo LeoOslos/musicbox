@@ -652,8 +652,30 @@ async def get_artwork():
 
 # --- Frontend ---
 
-app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
+
+class EstaticosRevalidados(StaticFiles):
+    """StaticFiles no manda `Cache-Control`, y sin esa cabecera el navegador aplica
+    **cache heuristica**: estima la ventana de frescura como ~10% del tiempo
+    transcurrido desde el `Last-Modified` y, dentro de esa ventana, sirve del cache
+    **sin preguntarle al servidor**. Con archivos que llevan semanas sin cambiar la
+    ventana da varios dias, asi que un deploy del frontend puede tardar dias en
+    verse — y falla en silencio y en la direccion peligrosa: se mira una version
+    creyendo que es la desplegada. Paso de verdad en el cutover del 2026-08-29.
+
+    `no-cache` no desactiva el cache: obliga a **revalidar** contra el `ETag` en
+    cada carga. Si el archivo no cambio, la respuesta sigue siendo un 304 sin
+    cuerpo; si cambio, llega el nuevo. El costo es un round-trip por archivo.
+    """
+
+    def file_response(self, *args, **kwargs):
+        respuesta = super().file_response(*args, **kwargs)
+        respuesta.headers["Cache-Control"] = "no-cache"
+        return respuesta
+
+
+app.mount("/static", EstaticosRevalidados(directory="frontend/static"), name="static")
 
 @app.get("/")
 async def index():
-    return FileResponse("frontend/index.html")
+    # Mismo motivo que los estaticos: el index tambien lo cachea el navegador.
+    return FileResponse("frontend/index.html", headers={"Cache-Control": "no-cache"})
