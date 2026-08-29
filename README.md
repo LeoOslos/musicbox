@@ -130,27 +130,3 @@ Detalles que no son obvios:
 `cdparanoia` y `eject` (paquetes del sistema). El puerto 8080 debe estar habilitado en ufw — es la
 razón por la que el audio se sirve desde el dashboard y no desde un servidor aparte.
 
-## Vista previa del rediseño (:8081)
-
-La rama `restyling` trae el frontend nuevo y se sirve en paralelo a producción con
-`ecosystem.preview.config.js` (proceso pm2 `wiim-dashboard-v2`, puerto **8081**).
-
-`backend/preview.py` **no habla con el equipo**: reenvía la API y el WebSocket al
-dashboard de producción (:8080). Es a propósito — la lectora de CD, el vigía de
-cambio de disco y el autoplay no admiten dos dueños, así que la única diferencia
-entre las dos versiones es la piel. El audio del CD lo sigue sirviendo :8080, que
-es la URL que el backend le pasa al WiiM y el puerto ya habilitado en ufw.
-
-Qué cambia respecto de la versión en :8080:
-
-- **La carátula pasa a ser la pieza principal** y el color de la tapa tiñe toda la
-  página, no solo un punto de la marca.
-- **La lista del disco tiene columna propia** y aparece sólo cuando hay un disco:
-  sin disco, el escenario se cierra alrededor de lo que suena en vez de dejar
-  media pantalla vacía.
-- **Fuente, ecualizador y datos del equipo pasan a pestañas** cerradas por defecto:
-  se configuran una vez y el resto del tiempo estorban.
-- **Arreglado**: en pantallas anchas los tres tiempos de la barra de progreso se
-  pisaban entre sí (`0:00PAUSADO0:00`). Ahora son dos, a los extremos, y el estado
-  es una etiqueta arriba del título.
-- **Teclado**: espacio (play/pausa), ←/→ (tema), ↑/↓ (volumen), M (silencio).
