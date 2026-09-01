@@ -50,9 +50,13 @@ PORT = int(os.environ.get("PORT", "8080"))
 REDIRECT_URI = f"http://127.0.0.1:{PORT}/api/spotify/callback"
 SCOPES = "user-read-playback-state user-modify-playback-state"
 
-# Match hint for picking the WiiM out of the Spotify Connect device list — same
-# hint the old standalone play_spotify_wiim.py script used.
-WIIM_NAME_HINT = "wiim"
+# Match hints for picking the WiiM out of the Spotify Connect device list.
+# It broadcasts as "Music box" over Connect, not anything containing "wiim" —
+# confirmed against a live /me/player/devices call, which is what made every
+# seek silently no-op (device lookup failed, caught, fell through to the local
+# WiiM command — the actual bug behind "la barra vuelve pero no mueve nada").
+# Same keyword set as inventory.py's _WIIM_KEYWORDS, for the same reason.
+WIIM_NAME_HINTS = ("music box", "wiim", "linkplay")
 
 _AUTH_BASE = "https://accounts.spotify.com"
 _API_BASE = "https://api.spotify.com/v1"
@@ -177,7 +181,7 @@ async def _devices() -> list[dict]:
 
 async def _wiim_device_id() -> str:
     devices = await _devices()
-    wiim = next((d for d in devices if WIIM_NAME_HINT in d["name"].lower()), None)
+    wiim = next((d for d in devices if any(kw in d["name"].lower() for kw in WIIM_NAME_HINTS)), None)
     if not wiim:
         names = ", ".join(d["name"] for d in devices) or "ninguno"
         raise SpotifyError(f"El WiiM no aparece como dispositivo Spotify Connect (visibles: {names})")
