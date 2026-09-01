@@ -535,15 +535,16 @@ input[type="range"]::-moz-range-thumb {
 .disc-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
 /* ── Letra (mismo molde que .disc-col: techo atado al viewport, scroll propio,
-   nunca el de la pagina) ──────────────────────────────────── */
+   nunca el de la pagina) — pero el cuadro va tenue: la letra tiene que leerse
+   sólida flotando casi directo sobre el fondo, no en una tarjeta opaca. */
 .lyrics-col {
   flex-direction: column;
   align-self: center;
-  box-shadow: var(--shadow-panel);
-  background: var(--panel);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid var(--line);
+  box-shadow: none;
+  background: color-mix(in srgb, var(--panel) 35%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
   border-radius: var(--r-lg);
   padding: 1.15rem 1.15rem 1rem;
   min-height: 0;
