@@ -1107,10 +1107,31 @@ function renderLyrics() {
   }
   // Sin letra real que mostrar, la columna se cierra y el escenario vuelve a
   // dos columnas — no tiene sentido ocupar el lugar con una caja vacía. Un CD
-  // puesto siempre gana ese lugar, aunque el tema tenga letra encontrada.
+  // puesto siempre gana ese lugar, aunque el tema tenga letra encontrada. Y por
+  // pedido del usuario (2026-08-31): la columna nunca aparece sola, solo
+  // cuando el toggle del topbar está prendido.
   const hasContent = ['loading', 'synced', 'plain', 'instrumental'].includes(lyricsStatus);
-  document.body.classList.toggle('has-lyrics', hasContent && !lyricsOnDisc);
+  document.body.classList.toggle('has-lyrics', lyricsEnabled && hasContent && !lyricsOnDisc);
 }
+
+// --- Toggle mostrar/ocultar letra (apagado por defecto) ---
+
+const LYRICS_ENABLED_KEY = 'wiim-lyrics-enabled';
+let lyricsEnabled = false;
+
+function readStoredLyricsPref() {
+  try { return localStorage.getItem(LYRICS_ENABLED_KEY) === '1'; } catch { return false; }
+}
+
+lyricsEnabled = readStoredLyricsPref();
+$('btn-lyrics-toggle').classList.toggle('active', lyricsEnabled);
+
+$('btn-lyrics-toggle').addEventListener('click', () => {
+  lyricsEnabled = !lyricsEnabled;
+  $('btn-lyrics-toggle').classList.toggle('active', lyricsEnabled);
+  try { localStorage.setItem(LYRICS_ENABLED_KEY, lyricsEnabled ? '1' : '0'); } catch {}
+  renderLyrics();
+});
 
 // Piggybacks on the same 1s tick that already interpolates the progress bar —
 // no extra timer just to follow along with the lyrics.

@@ -245,6 +245,11 @@ body, .card, .panel, .disc-col { transition: background-color 0.35s ease, color 
 }
 .theme-btn svg { width: 15px; height: 15px; }
 .theme-btn:hover { border-color: var(--accent); color: var(--text-1); background: var(--raise-hover); }
+.theme-btn.active {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: transparent;
+}
 .eject-btn:hover { border-color: var(--accent); color: var(--text-1); }
 
 .badge {
