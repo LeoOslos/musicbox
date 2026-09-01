@@ -144,8 +144,18 @@ async def _try_spotify(coro_fn) -> None:
     coro_fn es una función sin argumentos, no la corrutina ya armada: si no
     hay login no debe ni construirse, o Python se queja de una corrutina
     creada y nunca esperada.
+
+    Se salta entero (sin ida y vuelta a Spotify) cuando la fuente ya se sabe
+    que no es esa: un tema de CD sonando, o el WiiM reportando una fuente que
+    no es wifi (Bluetooth/Line-in/Óptica/HDMI). Sin este corte, cada seek/
+    anterior/siguiente pagaba un viaje a Spotify condenado a fallar incluso
+    reproduciendo el disco — la lentitud que se notó después del fix del seek.
     """
     if not spotify.is_authenticated():
+        return
+    if _cd_current is not None:
+        return
+    if wiim.get_state().get("source") not in (None, "wifi"):
         return
     try:
         await coro_fn()
