@@ -473,6 +473,9 @@ function updateUI(s) {
     onDisc ? (cdAlbumTitle || '') : (s.album || ''));
   $('cd-tag').classList.toggle('hidden', !onDisc);
 
+  // Disco y letra comparten la misma columna del escenario (nunca las dos a
+  // la vez) — con un CD puesto, esa columna la gana la lista de temas.
+  lyricsOnDisc = onDisc;
   maybeLoadLyrics(
     onDisc ? (named?.title || '') : (s.title || ''),
     onDisc ? (cdAlbumArtist || '') : (s.artist || ''),
@@ -995,6 +998,7 @@ let lyricsLines = [];
 let lyricsPlain = '';
 let lastLyricsKey = null;
 let activeLyricIdx = -1;
+let lyricsOnDisc = false;
 
 async function maybeLoadLyrics(title, artist, album, duration) {
   const key = `${artist}|${title}`;
@@ -1043,6 +1047,11 @@ function renderLyrics() {
   } else {
     box.innerHTML = '<p class="lyrics-empty">Sin letra para este tema</p>';
   }
+  // Sin letra real que mostrar, la columna se cierra y el escenario vuelve a
+  // dos columnas — no tiene sentido ocupar el lugar con una caja vacía. Un CD
+  // puesto siempre gana ese lugar, aunque el tema tenga letra encontrada.
+  const hasContent = ['loading', 'synced', 'plain', 'instrumental'].includes(lyricsStatus);
+  document.body.classList.toggle('has-lyrics', hasContent && !lyricsOnDisc);
 }
 
 // Piggybacks on the same 1s tick that already interpolates the progress bar —

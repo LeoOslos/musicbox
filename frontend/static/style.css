@@ -273,9 +273,12 @@ main { position: relative; z-index: 1; padding: 0.5rem 2rem 2.5rem; }
   transition: max-width 0.4s ease;
 }
 
-/* Con disco, la lista de temas es la mitad del uso del equipo: se gana
-   una columna propia y el escenario se ensancha en vez de apretarse. */
-body.has-disc .stage {
+/* Con disco (o con letra encontrada), la tercera columna es la mitad del uso
+   del equipo: se gana una columna propia y el escenario se ensancha en vez de
+   apretarse. Disco y letra comparten el mismo slot — nunca a la vez, un CD en
+   la bandeja tiene prioridad (ver toggle de body.has-lyrics en app.js), así el
+   escenario no necesita una cuarta columna. */
+body.has-disc .stage, body.has-lyrics .stage {
   /* Con tres columnas, dejar una en 1fr abre un hueco muerto entre la ficha del
      tema y la lista: cada columna tiene techo propio y el conjunto se centra. */
   grid-template-columns: minmax(280px, 430px) minmax(320px, 620px) minmax(300px, 400px);
@@ -286,6 +289,9 @@ body.has-disc .stage {
 }
 .disc-col { display: none; }
 body.has-disc .disc-col { display: flex; }
+
+.lyrics-col { display: none; }
+body.has-lyrics .lyrics-col { display: flex; }
 
 /* ── Carátula ───────────────────────────────────────────── */
 .cover-col { display: flex; align-items: center; justify-content: center; }
@@ -528,6 +534,36 @@ input[type="range"]::-moz-range-thumb {
 .disc-shape { display: block; font-size: 11px; color: var(--text-3); margin-top: 2px; }
 .disc-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
+/* ── Letra (mismo molde que .disc-col: techo atado al viewport, scroll propio,
+   nunca el de la pagina) ──────────────────────────────────── */
+.lyrics-col {
+  flex-direction: column;
+  align-self: center;
+  box-shadow: var(--shadow-panel);
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 1.15rem 1.15rem 1rem;
+  min-height: 0;
+  max-height: calc(100vh - 200px);
+}
+
+.lyrics-body {
+  margin-top: 0.7rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.lyrics-line { margin: 0; color: var(--text-3); font-size: 14px; line-height: 1.5; transition: color 0.2s, font-weight 0.2s; }
+.lyrics-line.active { color: var(--text-1); font-weight: 600; }
+.lyrics-plain { margin: 0; color: var(--text-2); font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; }
+.lyrics-empty { margin: 0; color: var(--text-3); font-size: 13px; font-style: italic; }
+
 .btn-ghost {
   padding: 0.3rem 0.7rem;
   background: transparent;
@@ -655,19 +691,6 @@ body.has-disc .settings { max-width: 1520px; }
   border-radius: var(--r-lg);
 }
 
-/* ── Letra sincronizada ─────────────────────────────────── */
-.lyrics-body {
-  max-height: 320px;
-  overflow-y: auto;
-  display: flex; flex-direction: column; gap: 10px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
-}
-.lyrics-line { margin: 0; color: var(--text-3); font-size: 14px; line-height: 1.5; transition: color 0.2s, font-weight 0.2s; }
-.lyrics-line.active { color: var(--text-1); font-weight: 600; }
-.lyrics-plain { margin: 0; color: var(--text-2); font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; }
-.lyrics-empty { margin: 0; color: var(--text-3); font-size: 13px; font-style: italic; }
-
 /* ── Spotify ─────────────────────────────────────────────── */
 a.btn-accent { display: inline-block; text-decoration: none; }
 #spotify-search-row { margin-top: 0.9rem; }
@@ -765,9 +788,10 @@ body.panel-open .settings { margin-top: 1.4rem; }
   body.panel-open .eq-band { gap: 5px; }
   body.panel-open .eq-band-wrap { height: 56px; }
   body.panel-open .eq-slider { width: 56px; }
-  /* Con un disco puesto, la lista de temas es lo mas alto de la pagina: cede
-     ella, que ya tiene su propio scroll. */
+  /* Con un disco puesto (o con letra), la columna de la derecha es lo mas alto
+     de la pagina: cede ella, que ya tiene su propio scroll. */
   body.panel-open.has-disc .disc-col { max-height: calc(100vh - 330px); }
+  body.panel-open.has-lyrics .lyrics-col { max-height: calc(100vh - 330px); }
 }
 
 @media (max-height: 640px) {
@@ -783,11 +807,12 @@ body.panel-open .settings { margin-top: 1.4rem; }
 
 /* ── Pantallas medianas ─────────────────────────────────── */
 @media (max-width: 1250px) {
-  body.has-disc .stage {
+  body.has-disc .stage, body.has-lyrics .stage {
     grid-template-columns: minmax(260px, 380px) minmax(300px, 1fr);
     max-width: 1080px;
   }
   body.has-disc .disc-col { grid-column: 1 / -1; max-height: 420px; }
+  body.has-lyrics .lyrics-col { grid-column: 1 / -1; max-height: 420px; }
   body.has-disc .settings { max-width: 1080px; }
 }
 
@@ -800,7 +825,7 @@ body.panel-open .settings { margin-top: 1.4rem; }
   .eject-btn { padding: 0.3rem 0.55rem; }
   main { padding: 0.25rem 1.1rem 2rem; }
 
-  .stage, body.has-disc .stage {
+  .stage, body.has-disc .stage, body.has-lyrics .stage {
     grid-template-columns: 1fr;
     gap: 1.5rem;
     max-width: 520px;
@@ -815,6 +840,7 @@ body.panel-open .settings { margin-top: 1.4rem; }
   .vol-row { width: 100%; margin-top: 1.2rem; }
   .kbd-hint { display: none; }
   body.has-disc .disc-col { max-height: 60vh; }
+  body.has-lyrics .lyrics-col { max-height: 60vh; }
   .settings, body.has-disc .settings { max-width: 520px; }
   .eq-bands { grid-template-columns: repeat(5, 1fr); gap: 14px 4px; }
 }

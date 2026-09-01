@@ -175,6 +175,16 @@
         </p>
       </aside>
 
+      <!-- Letra column: same slot pattern as the disc column, mutually exclusive
+           with it (a CD in the tray keeps priority — see .has-disc vs .has-lyrics
+           in app.js) so the stage never needs a fourth column. -->
+      <aside class="lyrics-col" id="lyrics-col">
+        <span class="disc-label">Letra</span>
+        <div class="lyrics-body" id="lyrics-body">
+          <p class="lyrics-empty">Sin letra para este tema</p>
+        </div>
+      </aside>
+
     </section>
 
     <!-- Set once and forgotten: behind tabs, closed by default -->
@@ -182,7 +192,6 @@
       <nav class="tabs" role="tablist">
         <button class="tab" data-panel="source" role="tab">Fuente</button>
         <button class="tab" data-panel="eq" role="tab">Ecualizador</button>
-        <button class="tab" data-panel="lyrics" role="tab">Letra</button>
         <button class="tab" data-panel="spotify" role="tab">Spotify</button>
         <button class="tab" data-panel="device" role="tab">Dispositivo</button>
       </nav>
@@ -204,12 +213,6 @@
           <button id="btn-eq-flat" class="btn-ghost">Flat</button>
         </div>
         <div class="eq-bands" id="eq-bands"></div>
-      </div>
-
-      <div class="panel hidden" id="panel-lyrics" role="tabpanel">
-        <div class="lyrics-body" id="lyrics-body">
-          <p class="lyrics-empty">Sin letra para este tema</p>
-        </div>
       </div>
 
       <div class="panel hidden" id="panel-spotify" role="tabpanel">
