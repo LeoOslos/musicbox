@@ -158,7 +158,14 @@ async def _api(method: str, path: str, **kwargs) -> httpx.Response:
         return await client.request(method, f"{_API_BASE}{path}", headers=headers, timeout=8, **kwargs)
 
 
-async def search_tracks(query: str, limit: int = 12) -> list[dict]:
+# Esta app (Development Mode) rechaza /search con "Invalid limit" para
+# cualquier valor > 10 — comprobado barriendo 1..50 contra la API en vivo, no
+# es lo que dice la documentación general (hasta 50). 10 es el techo real.
+_MAX_SEARCH_LIMIT = 10
+
+
+async def search_tracks(query: str, limit: int = _MAX_SEARCH_LIMIT) -> list[dict]:
+    limit = min(limit, _MAX_SEARCH_LIMIT)
     r = await _api("GET", "/search", params={"q": query, "type": "track", "limit": limit})
     if r.status_code != 200:
         raise SpotifyError(f"Búsqueda falló: {r.status_code} {r.text}")
