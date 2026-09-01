@@ -88,6 +88,12 @@ La IP del WiiM se resuelve automáticamente al iniciar desde `~/iot-mvp/device-b
 | POST | `/api/cd/identify/{release_id}` | Fijar el álbum y recordarlo |
 | POST | `/api/cd/title/{n}` | Corregir a mano el nombre de un tema (vacío = volver al de la base) |
 | POST | `/api/cd/forget` | Deshacer la identificación |
+| GET | `/api/lyrics?artist=&title=&album=&duration=` | Letra del tema (lrclib.net), sincronizada si está disponible |
+| GET | `/api/spotify/status` | Si hay login de Spotify vigente y `SPOTIFY_CLIENT_ID` configurado |
+| GET | `/api/spotify/login` | Arranca el login OAuth PKCE (redirect) |
+| GET | `/api/spotify/callback` | Vuelta del login, intercambia el code por tokens |
+| GET | `/api/spotify/search?q=` | Buscar canciones |
+| POST | `/api/spotify/play` | `{"uri": "spotify:track:..."}` — reproduce en el WiiM vía Spotify Connect |
 
 ## Niveles de desarrollo
 
@@ -129,4 +135,43 @@ Detalles que no son obvios:
 
 `cdparanoia` y `eject` (paquetes del sistema). El puerto 8080 debe estar habilitado en ufw — es la
 razón por la que el audio se sirve desde el dashboard y no desde un servidor aparte.
+
+## Búsqueda de canciones y letra
+
+Pestañas **Letra** y **Spotify** en el panel de ajustes.
+
+### Letra sincronizada
+
+Viene de [lrclib.net](https://lrclib.net), gratis y sin API key — Spotify no expone letras por su Web
+API (el endpoint que usa su propia app es interno y no está documentado). Se busca por artista + título
++ duración del tema en curso; si no matchea exacto, cae a una búsqueda floja. El resaltado de la línea
+activa viaja en el mismo timer de 1s que ya interpola la barra de progreso, sin timer aparte.
+
+### Spotify — búsqueda y reproducción
+
+Usa el flujo OAuth **Authorization Code + PKCE** (sin client secret) para buscar canciones y mandarlas
+al WiiM como dispositivo Spotify Connect.
+
+**Setup (una sola vez):**
+
+1. Crear una app en el [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) y anotar
+   el **Client ID**.
+2. En **Redirect URIs** de esa app, agregar exactamente: `http://127.0.0.1:8080/api/spotify/callback`
+   Spotify **no acepta** `localhost` ni IPs de LAN (`192.168.1.155`) como redirect URI salvo HTTPS — solo
+   loopback (`127.0.0.1`) puede ir por HTTP (verificado contra la documentación de Spotify, 2026-08-31).
+3. En Mint, crear `~/musicbox/wiim-dashboard/.env` (gitignored) con una línea:
+   `SPOTIFY_CLIENT_ID=<el client id>`
+4. Reiniciar el servicio para que tome el `.env`: `pm2 restart wiim-dashboard`
+5. Login (una sola vez, después el refresh token lo renueva solo): como el callback exige loopback, hay
+   que llegar a la página **desde 127.0.0.1** — o parado frente a Mint, o con un túnel SSH desde donde
+   esté el navegador: `ssh -L 8080:localhost:8080 leoadmin@192.168.1.155`, y ahí abrir
+   `http://127.0.0.1:8080`, pestaña Spotify → **Conectar con Spotify**. El uso diario del dashboard
+   (`http://192.168.1.155:8080` o `http://mint:8080`) no necesita el túnel — solo ese login inicial.
+
+**Requiere cuenta Spotify Premium** para el control de reproducción (`/me/player/play` devuelve 403 en
+cuentas Free).
+
+El WiiM se ubica en la lista de dispositivos Spotify Connect por nombre (busca "wiim", sin distinguir
+mayúsculas). Si no aparece, revisar que el equipo esté prendido y visible en la red — Spotify Connect
+necesita que el dispositivo se haya anunciado recientemente.
 

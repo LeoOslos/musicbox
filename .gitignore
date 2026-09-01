@@ -2,5 +2,6 @@ venv/
 __pycache__/
 *.pyc
 .env
+spotify_token.json
 /tmp/
 *.log

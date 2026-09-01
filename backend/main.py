@@ -6,10 +6,10 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cdrom, discs, gnudb
+from . import cdrom, discs, gnudb, lyrics, spotify
 from .inventory import discover_wiim_ip
 from .wiim_player import WiimManager
 from .ws_manager import WSManager
@@ -637,6 +637,65 @@ async def cd_eject():
     _toc_cache.clear()
     _cd_current = None
     return {"ok": True, "track": None}
+
+
+# --- Lyrics ---
+
+# The frontend already resolves the right title/artist/album for both a stream
+# and a CD track (the device reports its own stream URL as the title for a CD,
+# useless here) — so it passes them in rather than this endpoint redoing that.
+@app.get("/api/lyrics")
+async def get_lyrics(artist: str = "", title: str = "", album: str = "", duration: float = 0):
+    return await lyrics.fetch(artist.strip(), title.strip(), album.strip() or None, duration or None)
+
+
+# --- Spotify ---
+
+@app.get("/api/spotify/status")
+async def spotify_status():
+    return {"authenticated": spotify.is_authenticated(), "configured": bool(spotify.CLIENT_ID)}
+
+
+@app.get("/api/spotify/login")
+async def spotify_login():
+    try:
+        url = spotify.build_authorize_url()
+    except spotify.SpotifyError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return RedirectResponse(url)
+
+
+@app.get("/api/spotify/callback")
+async def spotify_callback(code: str = "", state: str = "", error: str = ""):
+    if error:
+        return HTMLResponse(f"<p>Spotify: {error}</p>", status_code=400)
+    try:
+        await spotify.exchange_code(code, state)
+    except spotify.SpotifyError as e:
+        return HTMLResponse(f"<p>Error: {e}</p>", status_code=400)
+    return RedirectResponse("/")
+
+
+@app.get("/api/spotify/search")
+async def spotify_search(q: str):
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="Nothing to search for")
+    try:
+        return await spotify.search_tracks(q.strip())
+    except spotify.SpotifyError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/api/spotify/play")
+async def spotify_play(body: dict):
+    uri = body.get("uri", "")
+    if not uri:
+        raise HTTPException(status_code=400, detail="uri required")
+    try:
+        await spotify.play_track(uri)
+    except spotify.SpotifyError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"ok": True}
 
 
 # --- Artwork ---

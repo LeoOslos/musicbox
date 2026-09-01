@@ -655,6 +655,24 @@ body.has-disc .settings { max-width: 1520px; }
   border-radius: var(--r-lg);
 }
 
+/* ── Letra sincronizada ─────────────────────────────────── */
+.lyrics-body {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.lyrics-line { margin: 0; color: var(--text-3); font-size: 14px; line-height: 1.5; transition: color 0.2s, font-weight 0.2s; }
+.lyrics-line.active { color: var(--text-1); font-weight: 600; }
+.lyrics-plain { margin: 0; color: var(--text-2); font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; }
+.lyrics-empty { margin: 0; color: var(--text-3); font-size: 13px; font-style: italic; }
+
+/* ── Spotify ─────────────────────────────────────────────── */
+a.btn-accent { display: inline-block; text-decoration: none; }
+#spotify-search-row { margin-top: 0.9rem; }
+#spotify-results { margin-top: 0.6rem; max-height: 320px; }
+
 .source-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .source-btn {
   padding: 0.45rem 1rem;

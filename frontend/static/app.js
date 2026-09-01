@@ -321,6 +321,7 @@ function connectWS() {
     loadEqList();
     loadEqBands();
     loadCd();
+    loadSpotifyStatus();
   };
 
   ws.onmessage = e => {
@@ -472,6 +473,12 @@ function updateUI(s) {
     onDisc ? (cdAlbumTitle || '') : (s.album || ''));
   $('cd-tag').classList.toggle('hidden', !onDisc);
 
+  maybeLoadLyrics(
+    onDisc ? (named?.title || '') : (s.title || ''),
+    onDisc ? (cdAlbumArtist || '') : (s.artist || ''),
+    onDisc ? (cdAlbumTitle || '') : (s.album || ''),
+    s.duration || 0);
+
   // Source, shown next to the status instead of only inside the settings panel
   const srcId = s.source ?? '';
   const srcChip = $('source-chip');
@@ -551,6 +558,7 @@ function fmtTime(sec) {
 function updateProgress(pos, dur) {
   $('pos-label').textContent = fmtTime(pos);
   $('dur-label').textContent = fmtTime(dur);
+  updateLyricsHighlight(pos);
   // scaleX del relleno + translateX del riel del knob, los dos con la misma
   // transicion lineal de 0.9s: van sincronizados y no tocan el layout.
   const p = dur > 0 ? Math.min(1, Math.max(0, pos / dur)) : 0;
@@ -979,6 +987,139 @@ $('btn-eq-flat').addEventListener('click', async () => {
   setEqSliders([50, 50, 50, 50, 50, 50, 50, 50, 50, 50]);
   await postJSON('/api/eq/bands', { bands: eqBands });
 });
+
+// --- Lyrics ---
+
+let lyricsStatus = 'none';
+let lyricsLines = [];
+let lyricsPlain = '';
+let lastLyricsKey = null;
+let activeLyricIdx = -1;
+
+async function maybeLoadLyrics(title, artist, album, duration) {
+  const key = `${artist}|${title}`;
+  if (key === lastLyricsKey) return;
+  lastLyricsKey = key;
+  activeLyricIdx = -1;
+
+  if (!title || !artist) {
+    lyricsStatus = 'none'; lyricsLines = []; lyricsPlain = '';
+    renderLyrics();
+    return;
+  }
+
+  lyricsStatus = 'loading';
+  renderLyrics();
+  try {
+    const params = new URLSearchParams({ artist, title });
+    if (album) params.set('album', album);
+    if (duration) params.set('duration', Math.round(duration));
+    const data = await fetch(`/api/lyrics?${params}`).then(r => r.json());
+    // A slow request can land after a later track already started loading —
+    // never overwrite a newer key with a stale answer.
+    if (key !== lastLyricsKey) return;
+    lyricsStatus = data.status;
+    lyricsLines = data.lines || [];
+    lyricsPlain = data.plain || '';
+  } catch {
+    if (key !== lastLyricsKey) return;
+    lyricsStatus = 'none';
+  }
+  renderLyrics();
+}
+
+function renderLyrics() {
+  const box = $('lyrics-body');
+  if (!box) return;
+  activeLyricIdx = -1;
+  if (lyricsStatus === 'loading') {
+    box.innerHTML = '<p class="lyrics-empty">Buscando letra…</p>';
+  } else if (lyricsStatus === 'synced') {
+    box.innerHTML = lyricsLines.map((l, i) => `<p class="lyrics-line" data-i="${i}">${esc(l.text)}</p>`).join('');
+  } else if (lyricsStatus === 'plain') {
+    box.innerHTML = `<p class="lyrics-plain">${esc(lyricsPlain)}</p>`;
+  } else if (lyricsStatus === 'instrumental') {
+    box.innerHTML = '<p class="lyrics-empty">Instrumental — sin letra</p>';
+  } else {
+    box.innerHTML = '<p class="lyrics-empty">Sin letra para este tema</p>';
+  }
+}
+
+// Piggybacks on the same 1s tick that already interpolates the progress bar —
+// no extra timer just to follow along with the lyrics.
+function updateLyricsHighlight(pos) {
+  if (lyricsStatus !== 'synced' || !lyricsLines.length) return;
+  let idx = -1;
+  for (let i = 0; i < lyricsLines.length; i++) {
+    if (lyricsLines[i].time <= pos) idx = i; else break;
+  }
+  if (idx === activeLyricIdx) return;
+  const box = $('lyrics-body');
+  if (!box) return;
+  box.querySelector('.lyrics-line.active')?.classList.remove('active');
+  activeLyricIdx = idx;
+  const el = idx >= 0 ? box.querySelector(`.lyrics-line[data-i="${idx}"]`) : null;
+  if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+}
+
+// --- Spotify ---
+
+async function loadSpotifyStatus() {
+  try {
+    const s = await fetch('/api/spotify/status').then(r => r.json());
+    $('spotify-login').classList.toggle('hidden', s.authenticated);
+    $('spotify-search-row').classList.toggle('hidden', !s.authenticated);
+    if (!s.configured) {
+      $('spotify-login').textContent = 'Falta configurar SPOTIFY_CLIENT_ID en .env';
+      $('spotify-login').removeAttribute('href');
+    }
+  } catch {}
+}
+
+async function spotifySearch() {
+  const q = $('spotify-search').value.trim();
+  if (!q) return;
+  const box = $('spotify-results');
+  box.innerHTML = '<div class="cd-candidate">Buscando…</div>';
+  try {
+    const r = await fetch(`/api/spotify/search?q=${encodeURIComponent(q)}`);
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ detail: r.statusText }));
+      box.innerHTML = `<div class="cd-candidate">${esc(err.detail)}</div>`;
+      return;
+    }
+    const results = await r.json();
+    if (!Array.isArray(results) || !results.length) {
+      box.innerHTML = '<div class="cd-candidate">Sin resultados</div>';
+      return;
+    }
+    box.innerHTML = results.map(t => `
+      <button class="cd-candidate spotify-result" data-uri="${esc(t.uri)}">
+        <span class="cd-candidate-album">${esc(t.name)}</span>
+        <span>${esc(t.artist)}</span>
+        <span class="cd-candidate-meta">${esc(t.album)}</span>
+      </button>`).join('');
+    box.querySelectorAll('.spotify-result').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const resp = await fetch('/api/spotify/play', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uri: btn.dataset.uri }),
+        });
+        btn.disabled = false;
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+          alert(err.detail);
+        }
+      });
+    });
+  } catch {
+    box.innerHTML = '<div class="cd-candidate">Error al buscar</div>';
+  }
+}
+
+$('btn-spotify-search').addEventListener('click', spotifySearch);
+$('spotify-search').addEventListener('keydown', e => { if (e.key === 'Enter') spotifySearch(); });
 
 // Build sliders on page load (before WS connects)
 buildEqBands();

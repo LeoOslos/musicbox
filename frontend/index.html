@@ -182,6 +182,8 @@
       <nav class="tabs" role="tablist">
         <button class="tab" data-panel="source" role="tab">Fuente</button>
         <button class="tab" data-panel="eq" role="tab">Ecualizador</button>
+        <button class="tab" data-panel="lyrics" role="tab">Letra</button>
+        <button class="tab" data-panel="spotify" role="tab">Spotify</button>
         <button class="tab" data-panel="device" role="tab">Dispositivo</button>
       </nav>
 
@@ -202,6 +204,21 @@
           <button id="btn-eq-flat" class="btn-ghost">Flat</button>
         </div>
         <div class="eq-bands" id="eq-bands"></div>
+      </div>
+
+      <div class="panel hidden" id="panel-lyrics" role="tabpanel">
+        <div class="lyrics-body" id="lyrics-body">
+          <p class="lyrics-empty">Sin letra para este tema</p>
+        </div>
+      </div>
+
+      <div class="panel hidden" id="panel-spotify" role="tabpanel">
+        <a id="spotify-login" class="btn-accent" href="/api/spotify/login">Conectar con Spotify</a>
+        <div class="cd-search-row hidden" id="spotify-search-row">
+          <input id="spotify-search" type="text" placeholder="Buscar canción o artista">
+          <button id="btn-spotify-search" class="btn-ghost">Buscar</button>
+        </div>
+        <div class="cd-candidates" id="spotify-results"></div>
       </div>
 
       <div class="panel hidden" id="panel-device" role="tabpanel">
