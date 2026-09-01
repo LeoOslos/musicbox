@@ -136,27 +136,43 @@ async def pause():
 async def stop():
     await _player().stop()
 
+async def _try_spotify(coro_fn) -> None:
+    """Best-effort: si el WiiM no es el dispositivo activo de Spotify ahora
+    mismo, no hace nada — el comando local sigue siendo el que manda para
+    Bluetooth y otras fuentes que el equipo sí controla de verdad.
+
+    coro_fn es una función sin argumentos, no la corrutina ya armada: si no
+    hay login no debe ni construirse, o Python se queja de una corrutina
+    creada y nunca esperada.
+    """
+    if not spotify.is_authenticated():
+        return
+    try:
+        await coro_fn()
+    except spotify.SpotifyError as exc:
+        _LOGGER.info("Spotify no aplicó (¿no es la fuente activa?): %s", exc)
+
+
 @app.post("/api/prev")
 async def prev():
+    # setPlayerCmd:prev/next del WiiM tampoco mueve nada en sesión Spotify
+    # Connect — mismo bug que el seek, mismo fix: probar la API de Spotify
+    # primero, mandar el comando local siempre.
+    await _try_spotify(spotify.previous_track)
     await _player().previous_track()
 
 @app.post("/api/next")
 async def next_track():
+    await _try_spotify(spotify.next_track)
     await _player().next_track()
 
 @app.post("/api/seek/{seconds}")
 async def seek(seconds: int):
     # El comando local del WiiM no mueve nada durante una sesión Spotify
     # Connect — el equipo solo la RECIBE, no la controla (verificado contra la
-    # API cruda del dispositivo). Si hay login de Spotify se intenta ahí
-    # primero — best-effort: si el WiiM no es el dispositivo activo, no rompe
-    # nada — y el comando local se manda siempre, que es el que sí mueve el
-    # disco y otras fuentes que el equipo controla de verdad.
-    if spotify.is_authenticated():
-        try:
-            await spotify.seek(seconds * 1000)
-        except spotify.SpotifyError as exc:
-            _LOGGER.info("Spotify seek no aplicó (¿no es la fuente activa?): %s", exc)
+    # API cruda del dispositivo). Se manda igual siempre, que es el que sí
+    # mueve el disco y otras fuentes que el equipo controla de verdad.
+    await _try_spotify(lambda: spotify.seek(seconds * 1000))
     await _player().seek(seconds)
 
 

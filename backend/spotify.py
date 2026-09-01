@@ -219,3 +219,19 @@ async def seek(position_ms: int) -> None:
     r = await _api("PUT", "/me/player/seek", params={"position_ms": position_ms, "device_id": device_id})
     if r.status_code not in (200, 204):
         raise SpotifyError(f"No se pudo mover la posición en Spotify: {r.status_code} {r.text}")
+
+
+async def previous_track() -> None:
+    """Same story as seek(): setPlayerCmd:prev replies OK and does nothing —
+    verified directly (Title on the raw device API stayed put after it)."""
+    device_id = await _wiim_device_id()
+    r = await _api("POST", "/me/player/previous", params={"device_id": device_id})
+    if r.status_code not in (200, 204):
+        raise SpotifyError(f"No se pudo ir al tema anterior en Spotify: {r.status_code} {r.text}")
+
+
+async def next_track() -> None:
+    device_id = await _wiim_device_id()
+    r = await _api("POST", "/me/player/next", params={"device_id": device_id})
+    if r.status_code not in (200, 204):
+        raise SpotifyError(f"No se pudo pasar al siguiente tema en Spotify: {r.status_code} {r.text}")
