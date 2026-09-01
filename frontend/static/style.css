@@ -423,6 +423,12 @@ body.has-lyrics .lyrics-col { display: flex; }
 }
 .progress-bar:focus-visible .progress-knob { opacity: 1; transform: translateY(-50%) scale(1); }
 
+/* Arrastrando: la transición de 0.9s (pensada para el tick ambiente de a
+   segundo) atrasa el dedo/mouse — durante el drag el movimiento va 1 a 1. */
+.progress-bar.is-scrubbing .progress-fill,
+.progress-bar.is-scrubbing .progress-knob-rail { transition: none; }
+.progress-bar.is-scrubbing .progress-knob { opacity: 1; transform: translateY(-50%) scale(1); }
+
 /* El bug que arreglamos: en una columna angosta los tres tiempos se
    pisaban («0:00PAUSADO0:00»). Ahora son dos, a los extremos. */
 .progress-times {

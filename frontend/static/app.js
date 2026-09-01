@@ -573,13 +573,12 @@ let localPos = 0;
 let localDur = 0;
 let lastProgressUpdate = 0;
 
-function restartProgressTimer(s) {
+// Separado de restartProgressTimer porque un seek también necesita reanudar el
+// tick sin pisar el localPos recién asignado (restartProgressTimer lo relee de
+// s.position, que en ese momento todavía es el de antes del seek).
+function startProgressTicker(isPlaying) {
   if (progressTimer) clearInterval(progressTimer);
-  localPos = s.position ?? 0;
-  localDur = s.duration ?? 0;
-  lastProgressUpdate = Date.now();
-
-  if (s.is_playing && localDur > 0) {
+  if (isPlaying && localDur > 0) {
     progressTimer = setInterval(() => {
       const elapsed = (Date.now() - lastProgressUpdate) / 1000;
       updateProgress(localPos + elapsed, localDur);
@@ -587,15 +586,74 @@ function restartProgressTimer(s) {
   }
 }
 
-// --- Progress bar seek on click ---
+function restartProgressTimer(s) {
+  localPos = s.position ?? 0;
+  localDur = s.duration ?? 0;
+  lastProgressUpdate = Date.now();
+  startProgressTicker(s.is_playing);
+}
 
-$('progress-bar-click').addEventListener('click', async e => {
-  if (!localDur) return;
-  const rect = e.currentTarget.getBoundingClientRect();
-  const ratio = (e.clientX - rect.left) / rect.width;
-  const sec = Math.round(Math.min(1, Math.max(0, ratio)) * localDur);
+// --- Progress bar: arrastrar para adelantar o atrasar ---
+//
+// Antes solo eran clicks: el pedido de seek salía bien, pero nada tocaba
+// localPos/lastProgressUpdate, así que el próximo tick del timer de 1s pisaba
+// el salto con la posición interpolada de ANTES del seek — el "vuelve atrás"
+// que se veía al soltar. El arrastre en vivo (preview sin red hasta soltar) es
+// gratis una vez resuelto eso: el mismo cálculo, solo que en cada mousemove.
+
+const progressBar = $('progress-bar-click');
+let progressDragging = false;
+
+function seekRatioFromEvent(e) {
+  const rect = progressBar.getBoundingClientRect();
+  const point = e.touches?.[0] || e.changedTouches?.[0] || e;
+  return Math.min(1, Math.max(0, (point.clientX - rect.left) / rect.width));
+}
+
+// Solo visual: nada de red en cada pixel de arrastre.
+function previewSeek(ratio) {
+  if (localDur) updateProgress(ratio * localDur, localDur);
+}
+
+async function seekTo(sec) {
+  localPos = sec;
+  lastProgressUpdate = Date.now();
+  startProgressTicker(state.is_playing);
   await post(`/api/seek/${sec}`);
-});
+}
+
+function commitSeek(ratio) {
+  if (!localDur) return;
+  return seekTo(Math.round(ratio * localDur));
+}
+
+function startDrag(e) {
+  progressDragging = true;
+  progressBar.classList.add('is-scrubbing');
+  if (progressTimer) clearInterval(progressTimer);
+  previewSeek(seekRatioFromEvent(e));
+}
+
+function moveDrag(e) {
+  if (!progressDragging) return;
+  previewSeek(seekRatioFromEvent(e));
+}
+
+function endDrag(e) {
+  if (!progressDragging) return;
+  progressDragging = false;
+  progressBar.classList.remove('is-scrubbing');
+  commitSeek(seekRatioFromEvent(e));
+}
+
+progressBar.addEventListener('mousedown', startDrag);
+progressBar.addEventListener('touchstart', startDrag, { passive: true });
+document.addEventListener('mousemove', moveDrag);
+document.addEventListener('touchmove', moveDrag, { passive: true });
+document.addEventListener('mouseup', endDrag);
+document.addEventListener('touchend', endDrag);
+
+$('btn-restart').addEventListener('click', () => seekTo(0));
 
 // --- Playback controls ---
 
