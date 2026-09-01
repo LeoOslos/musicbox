@@ -146,6 +146,17 @@ async def next_track():
 
 @app.post("/api/seek/{seconds}")
 async def seek(seconds: int):
+    # El comando local del WiiM no mueve nada durante una sesión Spotify
+    # Connect — el equipo solo la RECIBE, no la controla (verificado contra la
+    # API cruda del dispositivo). Si hay login de Spotify se intenta ahí
+    # primero — best-effort: si el WiiM no es el dispositivo activo, no rompe
+    # nada — y el comando local se manda siempre, que es el que sí mueve el
+    # disco y otras fuentes que el equipo controla de verdad.
+    if spotify.is_authenticated():
+        try:
+            await spotify.seek(seconds * 1000)
+        except spotify.SpotifyError as exc:
+            _LOGGER.info("Spotify seek no aplicó (¿no es la fuente activa?): %s", exc)
     await _player().seek(seconds)
 
 

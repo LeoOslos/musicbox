@@ -175,16 +175,36 @@ async def _devices() -> list[dict]:
     return r.json().get("devices", [])
 
 
-async def play_track(uri: str) -> None:
+async def _wiim_device_id() -> str:
     devices = await _devices()
     wiim = next((d for d in devices if WIIM_NAME_HINT in d["name"].lower()), None)
     if not wiim:
         names = ", ".join(d["name"] for d in devices) or "ninguno"
         raise SpotifyError(f"El WiiM no aparece como dispositivo Spotify Connect (visibles: {names})")
+    return wiim["id"]
+
+
+async def play_track(uri: str) -> None:
+    device_id = await _wiim_device_id()
     # device_id here both transfers playback to the WiiM and starts the track,
     # in the one call — no separate transfer step needed.
-    r = await _api("PUT", "/me/player/play", params={"device_id": wiim["id"]}, json={"uris": [uri]})
+    r = await _api("PUT", "/me/player/play", params={"device_id": device_id}, json={"uris": [uri]})
     if r.status_code == 403:
         raise SpotifyError("Spotify rechazó la reproducción (403) — requiere cuenta Premium")
     if r.status_code not in (200, 204):
         raise SpotifyError(f"No se pudo reproducir: {r.status_code} {r.text}")
+
+
+async def seek(position_ms: int) -> None:
+    """Move the position of the current Spotify Connect session on the WiiM.
+
+    The WiiM's own local seek command (LinkPlay's setPlayerCmd:seek) is a no-op
+    while it's a Spotify Connect *receiver* — verified against the device's raw
+    HTTP API directly: it replies "OK" and curpos keeps advancing untouched. The
+    receiver only plays what Spotify's session feeds it; only Spotify's own API
+    actually controls the position of that session.
+    """
+    device_id = await _wiim_device_id()
+    r = await _api("PUT", "/me/player/seek", params={"position_ms": position_ms, "device_id": device_id})
+    if r.status_code not in (200, 204):
+        raise SpotifyError(f"No se pudo mover la posición en Spotify: {r.status_code} {r.text}")
