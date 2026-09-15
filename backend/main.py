@@ -14,7 +14,14 @@ from .inventory import discover_wiim_ip
 from .wiim_player import WiimManager
 from .ws_manager import WSManager
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+from .registro_log import configurar_logging
+
+# Formato estándar (registro_log, ~/PLAN-estandarizar-logs.md). uvicorn ya instaló sus handlers antes de
+# importar la app: se sacan para que sus líneas (arranque y accesos) pasen por el logger raíz con el mismo formato.
+configurar_logging("wiim-dashboard")
+for _nombre in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    logging.getLogger(_nombre).handlers.clear()
+    logging.getLogger(_nombre).propagate = True
 _LOGGER = logging.getLogger("cd")
 
 wiim = WiimManager()
