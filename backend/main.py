@@ -143,7 +143,7 @@ async def pause():
 async def stop():
     await _player().stop()
 
-async def _try_spotify(coro_fn) -> None:
+async def _try_spotify(coro_fn) -> bool:
     """Best-effort: si el WiiM no es el dispositivo activo de Spotify ahora
     mismo, no hace nada — el comando local sigue siendo el que manda para
     Bluetooth y otras fuentes que el equipo sí controla de verdad.
@@ -157,31 +157,37 @@ async def _try_spotify(coro_fn) -> None:
     no es wifi (Bluetooth/Line-in/Óptica/HDMI). Sin este corte, cada seek/
     anterior/siguiente pagaba un viaje a Spotify condenado a fallar incluso
     reproduciendo el disco — la lentitud que se notó después del fix del seek.
+
+    Devuelve True si Spotify aplicó el comando.
     """
     if not spotify.is_authenticated():
-        return
+        return False
     if _cd_current is not None:
-        return
+        return False
     if wiim.get_state().get("source") not in (None, "wifi"):
-        return
+        return False
     try:
         await coro_fn()
     except spotify.SpotifyError as exc:
         _LOGGER.info("Spotify no aplicó (¿no es la fuente activa?): %s", exc)
+        return False
+    return True
 
 
 @app.post("/api/prev")
 async def prev():
-    # setPlayerCmd:prev/next del WiiM tampoco mueve nada en sesión Spotify
-    # Connect — mismo bug que el seek, mismo fix: probar la API de Spotify
-    # primero, mandar el comando local siempre.
-    await _try_spotify(spotify.previous_track)
-    await _player().previous_track()
+    # setPlayerCmd:prev/next del WiiM casi nunca mueve nada en sesión Spotify
+    # Connect, así que se prueba la API de Spotify primero. Pero a veces el
+    # WiiM sí lo aplica, y mandar los dos saltaba dos temas: el comando local
+    # va solo si Spotify no lo tomó. (El seek no tiene el problema: es a una
+    # posición absoluta, repetirlo no mueve más.)
+    if not await _try_spotify(spotify.previous_track):
+        await _player().previous_track()
 
 @app.post("/api/next")
 async def next_track():
-    await _try_spotify(spotify.next_track)
-    await _player().next_track()
+    if not await _try_spotify(spotify.next_track):
+        await _player().next_track()
 
 @app.post("/api/seek/{seconds}")
 async def seek(seconds: int):
