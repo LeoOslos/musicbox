@@ -1133,6 +1133,42 @@ $('btn-lyrics-toggle').addEventListener('click', () => {
   renderLyrics();
 });
 
+// --- Toggle luces al ritmo de la música (luces-musica corre en el servidor) ---
+// El estado vive en el servidor, no en el navegador: se consulta al cargar, al
+// volver a la pestaña y cada 10 s, por si otro navegador lo cambió o el
+// proceso se cortó solo.
+
+function renderLuces(prendidas) {
+  const b = $('btn-luces-toggle');
+  b.classList.toggle('active', prendidas);
+  b.setAttribute('aria-pressed', prendidas ? 'true' : 'false');
+}
+
+async function refreshLuces() {
+  try {
+    const r = await fetch('/api/luces');
+    if (r.ok) renderLuces((await r.json()).prendidas);
+  } catch {}
+}
+
+$('btn-luces-toggle').addEventListener('click', async () => {
+  const b = $('btn-luces-toggle');
+  const destino = b.classList.contains('active') ? 'off' : 'on';
+  b.disabled = true;
+  try {
+    const r = await fetch(`/api/luces/${destino}`, { method: 'POST' });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) renderLuces(body.prendidas);
+    else console.warn('API error:', body.detail || r.statusText);
+  } finally {
+    b.disabled = false;
+  }
+});
+
+refreshLuces();
+setInterval(refreshLuces, 10000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshLuces(); });
+
 // Piggybacks on the same 1s tick that already interpolates the progress bar —
 // no extra timer just to follow along with the lyrics.
 function updateLyricsHighlight(pos) {

@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import cdrom, discs, gnudb, lyrics, spotify
+from . import cdrom, discs, gnudb, luces, lyrics, spotify
 from .inventory import discover_wiim_ip
 from .wiim_player import WiimManager
 from .ws_manager import WSManager
@@ -44,6 +44,7 @@ async def lifespan(app: FastAPI):
     yield
     cd_task.cancel()
     await cdrom.stop_reading()
+    await luces.apagar()
     await wiim.teardown()
 
 
@@ -697,6 +698,24 @@ async def cd_eject():
 @app.get("/api/lyrics")
 async def get_lyrics(artist: str = "", title: str = "", album: str = "", duration: float = 0):
     return await lyrics.fetch(artist.strip(), title.strip(), album.strip() or None, duration or None)
+
+
+# --- Luces al ritmo de la música (luces-musica, subproceso con su venv) ---
+
+@app.get("/api/luces")
+async def luces_estado():
+    return {"prendidas": luces.prendidas()}
+
+
+@app.post("/api/luces/{estado}")
+async def luces_cambiar(estado: str):
+    if estado not in ("on", "off"):
+        raise HTTPException(status_code=400, detail="estado: on | off")
+    try:
+        await (luces.prender() if estado == "on" else luces.apagar())
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return {"prendidas": luces.prendidas()}
 
 
 # --- Spotify ---

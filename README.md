@@ -94,6 +94,8 @@ La IP del WiiM se resuelve automáticamente al iniciar desde `~/iot-mvp/device-b
 | GET | `/api/spotify/callback` | Vuelta del login, intercambia el code por tokens |
 | GET | `/api/spotify/search?q=` | Buscar canciones |
 | POST | `/api/spotify/play` | `{"uri": "spotify:track:..."}` — reproduce en el WiiM vía Spotify Connect |
+| GET | `/api/luces` | Si las luces al ritmo de la música (proyecto `~/luces-musica`) están prendidas |
+| POST | `/api/luces/{on\|off}` | Prender / apagar: corre `luces_musica.py correr` con su venv; al apagar (SIGTERM) restaura las lámparas |
 
 ## Niveles de desarrollo
 
