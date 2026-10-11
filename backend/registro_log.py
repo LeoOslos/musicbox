@@ -32,6 +32,7 @@ import os
 import pwd
 import re
 import sys
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -46,9 +47,15 @@ class FormatoEstandar(logging.Formatter):
         self.usuario = pwd.getpwuid(os.geteuid()).pw_name
 
     def formatTime(self, record, datefmt=None):
-        t = datetime.fromtimestamp(record.created, TZ)
-        z = t.strftime("%z")
-        return t.strftime("%Y-%m-%d %H:%M:%S ") + (z[:3] if z.endswith("00") else z)
+        try:
+            t = datetime.fromtimestamp(record.created, TZ)
+            z = t.strftime("%z")
+            return t.strftime("%Y-%m-%d %H:%M:%S ") + (z[:3] if z.endswith("00") else z)
+        except Exception:
+            # Al apagarse el intérprete (p. ej. aiohttp avisando una sesión sin cerrar desde __del__),
+            # zoneinfo ya no puede importar y logging vuelca su error SIN formato al -error.log de pm2.
+            # Buenos Aires no tiene horario de verano: -03 fijo, con el módulo time (builtin).
+            return time.strftime("%Y-%m-%d %H:%M:%S -03", time.gmtime(record.created - 3 * 3600))
 
     def format(self, record):
         texto = record.getMessage()
